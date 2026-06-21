@@ -1,11 +1,7 @@
 import os
-from flask import Flask
+from app import create_app
 
-app = Flask(__name__)
-
-@app.route("/")
-def home():
-    return "Hola Fuenti"
+app = create_app()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))

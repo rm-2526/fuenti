@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Ignorar archivos de base de datos SQLite
+*.db
+
+# No subir BD de desarrollo
+instance/
