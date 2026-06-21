@@ -2,6 +2,9 @@ from datetime import datetime, timezone
 from sqlalchemy import Integer, String, Text, Boolean, DateTime, Float, ForeignKey, UniqueConstraint, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_login import UserMixin
+
 from app import db
 
 
@@ -9,18 +12,26 @@ def ahora_utc():
     return datetime.now(timezone.utc)
 
 
-class Facilitador(db.Model):
+class Facilitador(UserMixin, db.Model):
     __tablename__ = "facilitador"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    email: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    nombre: Mapped[str] = mapped_column(String(120), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=ahora_utc)
+    nombre: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
 
     evaluaciones: Mapped[list["Evaluacion"]] = relationship(
         back_populates="facilitador", cascade="all, delete-orphan"
     )
+
+    def set_password(self, password: str) -> None:
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password: str) -> bool:
+        return check_password_hash(self.password_hash, password)
 
 
 class Evaluacion(db.Model):
