@@ -14,6 +14,9 @@
         {% if current_user.is_authenticated %}
           <span class="navbar-text text-light me-3">{{ current_user.nombre }}</span>
           <a class="btn btn-outline-light btn-sm" href="{{ url_for('auth.logout') }}">Cerrar sesión</a>
+          <li class="nav-item">
+          <a class="nav-link" href="{{ url_for('evaluaciones.listado') }}">Evaluaciones</a>
+          </li>
         {% else %}
           <a class="btn btn-outline-light btn-sm" href="{{ url_for('auth.login') }}">Iniciar sesión</a>
         {% endif %}

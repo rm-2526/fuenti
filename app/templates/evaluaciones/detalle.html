@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3 mb-0">{{ evaluacion.titulo }}</h1>
+  <a href="{{ url_for('evaluaciones.listado') }}" class="btn btn-link">← Volver</a>
+</div>
+
+<p class="text-muted">
+  Umbral de aprobación: <strong>{{ evaluacion.umbral_aprobacion }}%</strong>
+  · Creada: {{ evaluacion.created_at.strftime('%Y-%m-%d %H:%M') }}
+</p>
+
+<hr>
+
+{% for pregunta in evaluacion.preguntas|sort(attribute='orden') %}
+  <div class="card mb-3">
+    <div class="card-body">
+      <h2 class="h6">Pregunta {{ loop.index }}</h2>
+      <p>{{ pregunta.enunciado }}</p>
+      <ul class="list-group list-group-flush">
+        {% for alt in pregunta.alternativas|sort(attribute='orden') %}
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <span>{{ alt.texto }}</span>
+            {% if alt.es_correcta %}
+              <span class="badge bg-success">Correcta</span>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+{% endfor %}
+
+<form method="POST"
+      action="{{ url_for('evaluaciones.eliminar', eval_id=evaluacion.id) }}"
+      onsubmit="return confirm('¿Eliminar esta evaluación? Esta acción no se puede deshacer.');">
+  <button type="submit" class="btn btn-outline-danger">Eliminar evaluación</button>
+</form>
+{% endblock %}
