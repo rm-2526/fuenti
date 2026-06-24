@@ -20,7 +20,7 @@ class Facilitador(UserMixin, db.Model):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     nombre: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow
+        DateTime, nullable=False, default=ahora_utc
     )
 
     evaluaciones: Mapped[list["Evaluacion"]] = relationship(
