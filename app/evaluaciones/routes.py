@@ -2,10 +2,19 @@ import re
 
 from flask import abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
+from sqlalchemy.exc import IntegrityError
 
 from app import db
 from app.evaluaciones import bp
-from app.models import Alternativa, Evaluacion, Pregunta
+from app.models import Alternativa, Evaluacion, Pregunta, Sesion
+from app.utils.sesion import generar_codigo_sesion
+from app.models import ahora_utc
+
+
+# Maximo de reintentos para generar un codigo de sesion unico.
+# Con 32^6 combinaciones, una colision es practicamente imposible.
+# Si pasa 5 veces seguidas, es mas probable que sea bug que mala suerte.
+_MAX_REINTENTOS_CODIGO = 5
 
 
 @bp.route("/")
@@ -36,29 +45,125 @@ def nueva():
 @bp.route("/<int:eval_id>")
 @login_required
 def detalle(eval_id):
-    evaluacion = db.session.get(Evaluacion, eval_id)
-    if evaluacion is None:
-        abort(404)
-    if evaluacion.facilitador_id != current_user.id:
-        abort(403)
-    return render_template("evaluaciones/detalle.html", evaluacion=evaluacion)
+    evaluacion = _get_evaluacion_propia(eval_id)
+    sesiones = sorted(
+        evaluacion.sesiones, key=lambda s: s.abierta_at, reverse=True
+    )
+    return render_template(
+        "evaluaciones/detalle.html",
+        evaluacion=evaluacion,
+        sesiones=sesiones,
+    )
 
 
 @bp.route("/<int:eval_id>/eliminar", methods=["POST"])
 @login_required
 def eliminar(eval_id):
-    evaluacion = db.session.get(Evaluacion, eval_id)
-    if evaluacion is None:
-        abort(404)
-    if evaluacion.facilitador_id != current_user.id:
-        abort(403)
+    evaluacion = _get_evaluacion_propia(eval_id)
     db.session.delete(evaluacion)
     db.session.commit()
     flash(f'Evaluación "{evaluacion.titulo}" eliminada.', "success")
     return redirect(url_for("evaluaciones.listado"))
 
 
+# --------------------------- Sesiones (facilitador) ---------------------------
+
+@bp.route("/<int:eval_id>/sesiones/abrir", methods=["POST"])
+@login_required
+def abrir_sesion(eval_id):
+    evaluacion = _get_evaluacion_propia(eval_id)
+
+    # Validacion de negocio: no se puede abrir una sesion para una evaluacion
+    # sin preguntas (el participante no tendria nada que responder).
+    if not evaluacion.preguntas:
+        flash(
+            "No se puede abrir una sesión: la evaluación no tiene preguntas.",
+            "danger",
+        )
+        return redirect(url_for("evaluaciones.detalle", eval_id=eval_id))
+
+    sesion = _crear_sesion_con_codigo_unico(evaluacion.id)
+    flash(f"Sesión abierta. Código: {sesion.codigo}", "success")
+    return redirect(
+        url_for("evaluaciones.detalle_sesion", eval_id=eval_id, sesion_id=sesion.id)
+    )
+
+
+@bp.route("/<int:eval_id>/sesiones/<int:sesion_id>")
+@login_required
+def detalle_sesion(eval_id, sesion_id):
+    evaluacion = _get_evaluacion_propia(eval_id)
+    sesion = _get_sesion_de_evaluacion(evaluacion, sesion_id)
+    return render_template(
+        "evaluaciones/detalle_sesion.html",
+        evaluacion=evaluacion,
+        sesion=sesion,
+    )
+
+
+@bp.route("/<int:eval_id>/sesiones/<int:sesion_id>/cerrar", methods=["POST"])
+@login_required
+def cerrar_sesion(eval_id, sesion_id):
+    evaluacion = _get_evaluacion_propia(eval_id)
+    sesion = _get_sesion_de_evaluacion(evaluacion, sesion_id)
+
+    # Idempotente: cerrar una sesion ya cerrada no es error.
+    if sesion.estado == "cerrada":
+        flash("La sesión ya estaba cerrada.", "info")
+    else:
+        sesion.estado = "cerrada"
+        sesion.cerrada_at = ahora_utc()
+        db.session.commit()
+        flash("Sesión cerrada. No aceptará nuevos ingresos.", "success")
+
+    return redirect(
+        url_for("evaluaciones.detalle_sesion", eval_id=eval_id, sesion_id=sesion_id)
+    )
+
+
 # --------------------------- Helpers ---------------------------
+
+def _get_evaluacion_propia(eval_id: int) -> Evaluacion:
+    """404 si no existe, 403 si no es del facilitador autenticado."""
+    evaluacion = db.session.get(Evaluacion, eval_id)
+    if evaluacion is None:
+        abort(404)
+    if evaluacion.facilitador_id != current_user.id:
+        abort(403)
+    return evaluacion
+
+
+def _get_sesion_de_evaluacion(evaluacion: Evaluacion, sesion_id: int) -> Sesion:
+    """404 si la sesion no pertenece a esa evaluacion.
+    El chequeo de duenio ya esta hecho por _get_evaluacion_propia.
+    """
+    sesion = db.session.get(Sesion, sesion_id)
+    if sesion is None or sesion.evaluacion_id != evaluacion.id:
+        abort(404)
+    return sesion
+
+
+def _crear_sesion_con_codigo_unico(evaluacion_id: int) -> Sesion:
+    """Crea una Sesion con codigo unico, reintentando si hay colision.
+
+    La unicidad la garantiza la BD (unique constraint en sesion.codigo).
+    Si IntegrityError despues de _MAX_REINTENTOS_CODIGO intentos, levanta
+    RuntimeError: en ese caso es mas probable un bug que mala suerte.
+    """
+    for _ in range(_MAX_REINTENTOS_CODIGO):
+        codigo = generar_codigo_sesion()
+        sesion = Sesion(evaluacion_id=evaluacion_id, codigo=codigo)
+        db.session.add(sesion)
+        try:
+            db.session.commit()
+            return sesion
+        except IntegrityError:
+            db.session.rollback()
+            continue
+    raise RuntimeError(
+        f"No se pudo generar un código único tras {_MAX_REINTENTOS_CODIGO} intentos."
+    )
+
 
 def _crear_evaluacion():
     """Procesa el POST de /evaluaciones/nueva.

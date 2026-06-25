@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3 mb-0">Sesión de "{{ evaluacion.titulo }}"</h1>
+  <a href="{{ url_for('evaluaciones.detalle', eval_id=evaluacion.id) }}" class="btn btn-link">
+    ← Volver a la evaluación
+  </a>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row">
+      <div class="col-md-6">
+        <p class="mb-1 text-muted">Código de la sesión</p>
+        <p class="h2 font-monospace mb-3">{{ sesion.codigo }}</p>
+
+        <p class="mb-1 text-muted">Estado</p>
+        <p class="mb-3">
+          {% if sesion.estado == "abierta" %}
+            <span class="badge bg-success">Abierta</span>
+          {% else %}
+            <span class="badge bg-secondary">Cerrada</span>
+          {% endif %}
+        </p>
+
+        <p class="mb-1 text-muted">Abierta</p>
+        <p class="mb-3">{{ sesion.abierta_at.strftime('%Y-%m-%d %H:%M') }} UTC</p>
+
+        {% if sesion.cerrada_at %}
+          <p class="mb-1 text-muted">Cerrada</p>
+          <p class="mb-3">{{ sesion.cerrada_at.strftime('%Y-%m-%d %H:%M') }} UTC</p>
+        {% endif %}
+      </div>
+
+      <div class="col-md-6">
+        <p class="mb-1 text-muted">Link para participantes</p>
+        <div class="input-group mb-3">
+          <input type="text"
+                 class="form-control font-monospace"
+                 id="link-participante"
+                 value="{{ url_for('participante.ingreso', codigo=sesion.codigo, _external=True) }}"
+                 readonly>
+          <button class="btn btn-outline-secondary"
+                  type="button"
+                  onclick="document.getElementById('link-participante').select(); document.execCommand('copy');">
+            Copiar
+          </button>
+        </div>
+        <p class="text-muted small">
+          Comparte este link con los participantes. Cada uno ingresará con su RUT.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if sesion.estado == "abierta" %}
+  <form method="POST"
+        action="{{ url_for('evaluaciones.cerrar_sesion', eval_id=evaluacion.id, sesion_id=sesion.id) }}"
+        onsubmit="return confirm('¿Cerrar esta sesión? No aceptará más ingresos.');">
+    <button type="submit" class="btn btn-outline-danger">Cerrar sesión</button>
+  </form>
+{% endif %}
+{% endblock %}

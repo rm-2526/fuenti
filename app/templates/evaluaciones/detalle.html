@@ -9,14 +9,88 @@
 <p class="text-muted">
   Umbral de aprobación: <strong>{{ evaluacion.umbral_aprobacion }}%</strong>
   · Creada: {{ evaluacion.created_at.strftime('%Y-%m-%d %H:%M') }}
+  · Preguntas: <strong>{{ evaluacion.preguntas|length }}</strong>
 </p>
 
 <hr>
 
+<!-- Sesiones -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="h4 mb-0">Sesiones</h2>
+  <form method="POST"
+        action="{{ url_for('evaluaciones.abrir_sesion', eval_id=evaluacion.id) }}">
+    <button type="submit"
+            class="btn btn-primary"
+            {% if not evaluacion.preguntas %}disabled
+            title="Agrega al menos una pregunta para poder abrir una sesión"
+            {% endif %}>
+      + Abrir sesión
+    </button>
+  </form>
+</div>
+
+{% if sesiones %}
+  <div class="table-responsive mb-4">
+    <table class="table table-hover align-middle">
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Estado</th>
+          <th>Abierta</th>
+          <th>Cerrada</th>
+          <th class="text-end">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in sesiones %}
+        <tr>
+          <td class="font-monospace">{{ s.codigo }}</td>
+          <td>
+            {% if s.estado == "abierta" %}
+              <span class="badge bg-success">Abierta</span>
+            {% else %}
+              <span class="badge bg-secondary">Cerrada</span>
+            {% endif %}
+          </td>
+          <td>{{ s.abierta_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td>
+            {% if s.cerrada_at %}
+              {{ s.cerrada_at.strftime('%Y-%m-%d %H:%M') }}
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            <a href="{{ url_for('evaluaciones.detalle_sesion', eval_id=evaluacion.id, sesion_id=s.id) }}"
+               class="btn btn-sm btn-outline-primary">
+              Ver
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <div class="alert alert-info mb-4">
+    Esta evaluación todavía no tiene sesiones.
+    {% if evaluacion.preguntas %}
+      Abrí una para empezar a recibir participantes.
+    {% else %}
+      Primero agrega preguntas, después podrás abrir una sesión.
+    {% endif %}
+  </div>
+{% endif %}
+
+<hr>
+
+<!-- Preguntas -->
+<h2 class="h4 mb-3">Preguntas</h2>
+
 {% for pregunta in evaluacion.preguntas|sort(attribute='orden') %}
   <div class="card mb-3">
     <div class="card-body">
-      <h2 class="h6">Pregunta {{ loop.index }}</h2>
+      <h3 class="h6">Pregunta {{ loop.index }}</h3>
       <p>{{ pregunta.enunciado }}</p>
       <ul class="list-group list-group-flush">
         {% for alt in pregunta.alternativas|sort(attribute='orden') %}
@@ -32,9 +106,11 @@
   </div>
 {% endfor %}
 
+<hr>
+
 <form method="POST"
       action="{{ url_for('evaluaciones.eliminar', eval_id=evaluacion.id) }}"
-      onsubmit="return confirm('¿Eliminar esta evaluación? Esta acción no se puede deshacer.');">
+      onsubmit="return confirm('¿Eliminar esta evaluación? Esta acción no se puede deshacer. Si tiene sesiones, también se borrarán todas las respuestas asociadas.');">
   <button type="submit" class="btn btn-outline-danger">Eliminar evaluación</button>
 </form>
 {% endblock %}

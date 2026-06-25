@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-6 col-lg-5">
+    <div class="card mt-4">
+      <div class="card-body">
+        <h1 class="h4 mb-3">{{ sesion.evaluacion.titulo }}</h1>
+        <p class="text-muted small mb-4">
+          Sesión: <span class="font-monospace">{{ sesion.codigo }}</span>
+        </p>
+
+        <p>Ingresa tu RUT para comenzar la evaluación.</p>
+
+        <form method="POST"
+              action="{{ url_for('participante.ingreso', codigo=sesion.codigo) }}">
+          <div class="mb-3">
+            <label for="rut" class="form-label">RUT</label>
+            <input type="text"
+                   class="form-control"
+                   id="rut"
+                   name="rut"
+                   value="{{ rut }}"
+                   placeholder="12.345.678-5"
+                   autocomplete="off"
+                   autofocus
+                   required>
+            <div class="form-text">
+              Puedes escribirlo con puntos y guion, o sin nada.
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Ingresar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
