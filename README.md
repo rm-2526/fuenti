@@ -15,13 +15,15 @@ MVP en desarrollo como proyecto de tesis. Avance por objetivo específico:
 | OE | Descripción | Estado |
 |---|---|---|
 | OE1 | Facilitador crea, lista y elimina evaluaciones de opción múltiple | ✅ Done |
-| OE2 | Participante ingresa con RUT, responde la evaluación, recibe resultado | ⏳ Pendiente |
+| OE2 | Participante ingresa con RUT, responde la evaluación, recibe resultado | 🟡 Parcial |
 | OE3 | Facilitador visualiza resultados agregados de una sesión | ⏳ Pendiente |
 | OE4 | Hash de RUT con salt, aislamiento por facilitador, sesiones cerradas no aceptan más respuestas | 🟡 Parcial |
 
-Detalle de OE4 parcial: el aislamiento por facilitador está implementado y testeado (403 cross-facilitador en lectura y eliminación). El hash de RUT usa SHA-256 con salt configurado vía variable de entorno `RUT_SALT`. Queda pendiente el chequeo de que sesiones cerradas no acepten más respuestas, que se implementa junto con el flujo del participante (OE2) en el resto de HC3.
+Detalle de OE2 parcial: el facilitador puede abrir y cerrar sesiones de cada evaluación. El participante puede ingresar a una sesión abierta con su RUT (link público `/sesion/<codigo>/ingreso`), el RUT se valida con el algoritmo módulo 11, se hashea con SHA-256 + salt y se persiste un registro de Participante. Falta el formulario de respuesta del cuestionario, el cálculo del resultado y la vista de resultado para el participante.
 
-**Tests automatizados: 35 passing.**
+Detalle de OE4 parcial: el aislamiento por facilitador está implementado y testeado (403 cross-facilitador en lectura, eliminación y gestión de sesiones). El hash de RUT usa SHA-256 con salt configurado vía variable de entorno `RUT_SALT`. El chequeo de "sesiones cerradas no aceptan más interacciones" está activo en los dos endpoints públicos existentes (ingreso y placeholder de responder). Queda pendiente extender el mismo chequeo al endpoint de envío de respuestas cuando se implemente.
+
+**Tests automatizados: 60 passing.**
 
 ## Stack técnico
 
@@ -33,7 +35,7 @@ Detalle de OE4 parcial: el aislamiento por facilitador está implementado y test
 | BD desarrollo | SQLite |
 | BD producción | PostgreSQL en Neon (AWS us-west-2) |
 | Frontend | HTML + Bootstrap 5 (CDN) + JavaScript vanilla |
-| Hashing RUT | `hashlib` (SHA-256) |
+| Hashing RUT | `hashlib` (SHA-256) con salt |
 | Hashing contraseñas | `werkzeug.security` |
 | Despliegue | Render.com (plan Free) |
 | Tests | pytest |
@@ -42,33 +44,39 @@ Detalle de OE4 parcial: el aislamiento por facilitador está implementado y test
 
 ```
 fuenti/
-├── app/                       # Código de la aplicación Flask
-│   ├── __init__.py            # Application factory (create_app)
-│   ├── config.py              # Configuración (lee env vars)
-│   ├── models.py              # Modelos SQLAlchemy
-│   ├── auth/                  # Blueprint de autenticación
+├── app/                          # Código de la aplicación Flask
+│   ├── __init__.py               # Application factory (create_app)
+│   ├── config.py                 # Configuración (lee env vars)
+│   ├── models.py                 # Modelos SQLAlchemy
+│   ├── auth/                     # Blueprint de autenticación
 │   │   ├── __init__.py
 │   │   └── routes.py
-│   ├── evaluaciones/          # Blueprint de evaluaciones (OE1)
+│   ├── evaluaciones/             # Blueprint del facilitador: CRUD evaluaciones + sesiones
+│   │   ├── __init__.py
+│   │   └── routes.py
+│   ├── participante/             # Blueprint público: ingreso del participante
 │   │   ├── __init__.py
 │   │   └── routes.py
 │   └── utils/
 │       ├── __init__.py
-│       └── rut.py             # Validación, normalización y hash del RUT
-├── migrations/                # Migraciones Alembic (Flask-Migrate)
+│       ├── rut.py                # Validación, normalización y hash con salt del RUT
+│       └── sesion.py             # Generación de códigos de sesión (alfabeto sin ambigüedades)
+├── migrations/                   # Migraciones Alembic (Flask-Migrate)
 ├── scripts/
-│   └── seed_facilitador.py    # Crea o actualiza un facilitador para login
+│   └── seed_facilitador.py       # Crea o actualiza un facilitador para login
 ├── tests/
 │   ├── test_rut.py
 │   ├── test_auth.py
-│   └── test_evaluaciones.py
+│   ├── test_evaluaciones.py
+│   ├── test_sesion_utils.py
+│   └── test_sesiones.py          # Flujo completo: facilitador abre/cierra, participante ingresa
 ├── docs/
 │   ├── REQUERIMIENTOS.md
 │   └── diagramas/
-├── conftest.py                # Configuración de pytest
-├── main.py                    # Punto de entrada (gunicorn / flask run)
-├── Procfile                   # Comando de arranque para Render
-├── requirements.txt           # Dependencias Python
+├── conftest.py                   # Configuración de pytest
+├── main.py                       # Punto de entrada (gunicorn / flask run)
+├── Procfile                      # Comando de arranque para Render
+├── requirements.txt              # Dependencias Python
 ├── runtime.txt
 └── README.md
 ```
@@ -94,7 +102,7 @@ FLASK_APP=app
 SECRET_KEY=cualquier-string-aleatorio-para-desarrollo
 ```
 
-No es necesario definir `DATABASE_URL`: si no está, la app usa SQLite local (`fuenti.db`).
+No es necesario definir `DATABASE_URL` ni `RUT_SALT` para desarrollo: si no están, la app usa SQLite local (`fuenti.db`) y un salt placeholder. En producción ambas son obligatorias y se setean en el dashboard de Render.
 
 Inicializar la base de datos aplicando las migraciones:
 
@@ -142,8 +150,9 @@ La aplicación está desplegada en **https://fuenti.onrender.com**.
 
 | Variable | Descripción |
 |---|---|
-| `SECRET_KEY` | String aleatorio largo. No reusar el de desarrollo. |
+| `SECRET_KEY` | String aleatorio largo. No reusar el de desarrollo. Rotable: solo invalida sesiones de login. |
 | `DATABASE_URL` | Connection string **pooled** de Neon. Debe empezar con `postgresql://` y terminar con `?sslmode=require`. Pegar el valor pelado, sin comillas envolviendo. |
+| `RUT_SALT` | Salt para el hash de RUT. Generar con `python -c "import secrets; print(secrets.token_hex(32))"`. **No rotable** una vez que hay participantes reales en la BD: rotarlo invalida todos los hashes existentes. Guardar copia de respaldo fuera de Render. |
 
 ### Migraciones y seeds en producción
 
@@ -174,4 +183,4 @@ Cerrar la terminal al terminar para que `$env:DATABASE_URL` no persista en sesio
 
 ## Próximos pasos
 
-HC3 está en desarrollo. Ya se incorporó el salt para el hash de RUT (variable de entorno `RUT_SALT`), cerrando uno de los componentes de OE4. Queda por implementar el flujo del participante (OE2): ingreso con RUT, hash al guardar, formulario de respuesta y cálculo de resultado. El chequeo de sesiones cerradas se desarrolla junto con OE2 y cierra el último requisito pendiente de OE4.
+HC3 está en desarrollo. Cerrado en HC3 Día 1: salt para el hash de RUT (variable `RUT_SALT`). Cerrado en HC3 Día 2: flujo de sesiones del facilitador (abrir, cerrar, listar) y endpoint público de ingreso del participante con hash y chequeo de sesión cerrada. Pendiente en HC3 Día 3: formulario de respuesta del cuestionario, cálculo del resultado contra el umbral, vista de resultado para el participante. Esto completa OE2 y deja OE4 listo para ✅. Después viene OE3: visualización agregada de resultados para el facilitador.
