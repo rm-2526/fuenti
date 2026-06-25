@@ -19,9 +19,9 @@ MVP en desarrollo como proyecto de tesis. Avance por objetivo específico:
 | OE3 | Facilitador visualiza resultados agregados de una sesión | ⏳ Pendiente |
 | OE4 | Hash de RUT con salt, aislamiento por facilitador, sesiones cerradas no aceptan más respuestas | 🟡 Parcial |
 
-Detalle de OE4 parcial: el aislamiento por facilitador está implementado y testeado (403 cross-facilitador en lectura y eliminación). El hash de RUT está implementado con SHA-256 pero todavía sin salt; se incorpora al inicio del próximo hito, antes de comenzar el flujo de participantes.
+Detalle de OE4 parcial: el aislamiento por facilitador está implementado y testeado (403 cross-facilitador en lectura y eliminación). El hash de RUT usa SHA-256 con salt configurado vía variable de entorno `RUT_SALT`. Queda pendiente el chequeo de que sesiones cerradas no acepten más respuestas, que se implementa junto con el flujo del participante (OE2) en el resto de HC3.
 
-**Tests automatizados: 33 passing.**
+**Tests automatizados: 35 passing.**
 
 ## Stack técnico
 
@@ -174,4 +174,4 @@ Cerrar la terminal al terminar para que `$env:DATABASE_URL` no persista en sesio
 
 ## Próximos pasos
 
-El siguiente hito (HC3) implementa el flujo del participante (OE2): ingreso con RUT, hash al guardar, formulario de respuesta y cálculo de resultado. Antes de comenzar HC3 se incorpora el salt al hash de RUT para completar OE4.
+HC3 está en desarrollo. Ya se incorporó el salt para el hash de RUT (variable de entorno `RUT_SALT`), cerrando uno de los componentes de OE4. Queda por implementar el flujo del participante (OE2): ingreso con RUT, hash al guardar, formulario de respuesta y cálculo de resultado. El chequeo de sesiones cerradas se desarrolla junto con OE2 y cierra el último requisito pendiente de OE4.
