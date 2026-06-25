@@ -2,6 +2,11 @@ import pytest
 from app.utils.rut import normalizar_rut, validar_rut, hash_rut
 
 
+# Salt fijo para tests. No depende de la config de Flask para que estos
+# tests sean unitarios puros (no requieren app context).
+SALT_TEST = "salt-de-prueba-fijo"
+
+
 # === Normalización ===
 
 def test_normalizar_quita_puntos_y_guion():
@@ -45,23 +50,38 @@ def test_validar_rut_vacio():
 # === Hash ===
 
 def test_hash_es_deterministico_aunque_cambie_el_formato():
-    h1 = hash_rut("11.111.111-1")
-    h2 = hash_rut("111111111")
+    h1 = hash_rut("11.111.111-1", SALT_TEST)
+    h2 = hash_rut("111111111", SALT_TEST)
     assert h1 == h2
 
 
 def test_hash_de_ruts_distintos_es_distinto():
-    h1 = hash_rut("11.111.111-1")
-    h2 = hash_rut("12.345.678-5")
+    h1 = hash_rut("11.111.111-1", SALT_TEST)
+    h2 = hash_rut("12.345.678-5", SALT_TEST)
     assert h1 != h2
 
 
 def test_hash_de_rut_invalido_lanza_error():
     with pytest.raises(ValueError):
-        hash_rut("11.111.111-2")
+        hash_rut("11.111.111-2", SALT_TEST)
 
 
 def test_hash_tiene_64_caracteres_hex():
-    h = hash_rut("11.111.111-1")
+    h = hash_rut("11.111.111-1", SALT_TEST)
     assert len(h) == 64
     assert all(c in "0123456789abcdef" for c in h)
+
+
+def test_hash_con_distintos_salts_da_distintos_resultados():
+    """El mismo RUT con dos salts distintos debe producir hashes distintos.
+    Esto garantiza que el salt efectivamente entra en el calculo."""
+    h1 = hash_rut("11.111.111-1", "salt-uno")
+    h2 = hash_rut("11.111.111-1", "salt-dos")
+    assert h1 != h2
+
+
+def test_hash_con_salt_vacio_lanza_error():
+    """Defensa: si en algun deploy se olvida setear RUT_SALT y queda string vacio,
+    queremos que reviente, no que silenciosamente hashee sin salt."""
+    with pytest.raises(ValueError):
+        hash_rut("11.111.111-1", "")

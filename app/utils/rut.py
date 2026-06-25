@@ -62,13 +62,21 @@ def validar_rut(rut: str) -> bool:
     return dv == dv_esperado
 
 
-def hash_rut(rut: str) -> str:
+def hash_rut(rut: str, salt: str) -> str:
     """
-    Devuelve el hash SHA-256 del RUT normalizado, en hexadecimal.
-    Lanza ValueError si el RUT no es válido.
+    Devuelve el hash SHA-256 del RUT normalizado concatenado con un salt,
+    en hexadecimal. Lanza ValueError si el RUT no es valido.
+
+    El salt se pasa explicitamente por argumento (no se lee de config aqui)
+    para que la funcion sea pura y facil de testear. Los callers (blueprints,
+    scripts) son responsables de leer el salt desde current_app.config["RUT_SALT"]
+    y pasarlo aca.
     """
     if not validar_rut(rut):
         raise ValueError(f"RUT invalido: {rut}")
 
+    if not isinstance(salt, str) or salt == "":
+        raise ValueError("El salt debe ser un string no vacio")
+
     rut_norm = normalizar_rut(rut)
-    return hashlib.sha256(rut_norm.encode("utf-8")).hexdigest()
+    return hashlib.sha256((salt + rut_norm).encode("utf-8")).hexdigest()
