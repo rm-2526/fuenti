@@ -305,14 +305,16 @@ def test_responder_sin_ingreso_previo_redirige_a_ingreso(client, facilitador, ap
     assert resp.headers["Location"].endswith("/sesion/RSP234/ingreso")
 
 
-def test_responder_con_ingreso_valido_muestra_placeholder(client, facilitador, app):
+def test_responder_con_ingreso_valido_muestra_cuestionario(client, facilitador, app):
     eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id)
     _crear_sesion_directa(app, eval_id, codigo="RPV234")
 
     client.post("/sesion/RPV234/ingreso", data={"rut": RUT_VALIDO})
     resp = client.get("/sesion/RPV234/responder")
     assert resp.status_code == 200
-    assert "construcci\u00f3n".encode("utf-8") in resp.data
+    # El form real renderiza el enunciado de la pregunta y radios por pregunta.
+    assert "\u00bf2+2?".encode("utf-8") in resp.data
+    assert b'type="radio"' in resp.data
 
 
 def test_cookie_cruzada_entre_sesiones_redirige_a_ingreso(client, facilitador, app):

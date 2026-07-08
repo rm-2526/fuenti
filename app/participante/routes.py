@@ -1,7 +1,8 @@
 """Rutas publicas del flujo del participante.
 
 Sin auth: el participante no es un Facilitador, no tiene login.
-La identidad la lleva el flask.session despues del ingreso.
+La identidad la lleva flask.session["participante_id"] (cookie firmada por
+Flask) despues del ingreso.
 """
 
 from flask import (
@@ -16,8 +17,9 @@ from flask import (
 )
 
 from app import db
-from app.models import Participante, Sesion
+from app.models import Participante, Respuesta, Resultado, Sesion, ahora_utc
 from app.participante import bp
+from app.utils.calificacion import calcular_calificacion
 from app.utils.rut import hash_rut, validar_rut
 
 
@@ -35,31 +37,56 @@ def ingreso(codigo):
     return render_template("participante/ingreso.html", sesion=sesion, rut="")
 
 
-@bp.route("/<codigo>/responder", methods=["GET"])
+@bp.route("/<codigo>/responder", methods=["GET", "POST"])
 def responder(codigo):
     sesion = _get_sesion_por_codigo(codigo)
 
-    # Si la sesion se cerro despues del ingreso, igual mostramos cerrada.
+    # Sesion cerrada bloquea GET y POST. Este chequeo, aplicado al POST, es el
+    # que cierra el ultimo componente de OE4: una sesion cerrada no acepta
+    # respuestas aunque alguien arme el POST a mano.
     if sesion.estado != "abierta":
         return render_template("participante/sesion_cerrada.html", sesion=sesion)
 
-    # Validar que la cookie corresponde a un participante de ESTA sesion.
-    # Defensa contra cookies cruzadas (alguien ingreso a sesion A, despues
-    # abre el link de sesion B y la cookie todavia tiene el id de A).
-    participante_id = session.get("participante_id")
-    if participante_id is None:
+    # Defensa contra cookie cruzada: el participante debe ser de ESTA sesion.
+    participante = _participante_de_sesion(sesion)
+    if participante is None:
         return redirect(url_for("participante.ingreso", codigo=codigo))
 
-    participante = db.session.get(Participante, participante_id)
-    if participante is None or participante.sesion_id != sesion.id:
-        session.pop("participante_id", None)
-        return redirect(url_for("participante.ingreso", codigo=codigo))
+    # Ya respondio: no puede responder dos veces, lo mandamos a su resultado.
+    if participante.resultado is not None:
+        return redirect(url_for("participante.resultado", codigo=codigo))
 
-    # Placeholder hasta HC3 Dia 3. En Dia 3 se reemplaza con el form real.
+    preguntas = _preguntas_ordenadas(sesion)
+
+    if request.method == "POST":
+        return _procesar_respuestas(sesion, participante, preguntas)
+
     return render_template(
-        "participante/responder_placeholder.html",
+        "participante/responder.html",
         sesion=sesion,
-        participante=participante,
+        preguntas=preguntas,
+        seleccion={},
+    )
+
+
+@bp.route("/<codigo>/resultado", methods=["GET"])
+def resultado(codigo):
+    sesion = _get_sesion_por_codigo(codigo)
+
+    # OJO: aca NO se bloquea por sesion cerrada. Si el facilitador cierra la
+    # sesion despues de que el participante termino, igual debe poder ver su nota.
+    participante = _participante_de_sesion(sesion)
+    if participante is None:
+        return redirect(url_for("participante.ingreso", codigo=codigo))
+
+    # Todavia no respondio: lo mandamos al cuestionario.
+    if participante.resultado is None:
+        return redirect(url_for("participante.responder", codigo=codigo))
+
+    return render_template(
+        "participante/resultado.html",
+        sesion=sesion,
+        resultado=participante.resultado,
     )
 
 
@@ -71,6 +98,30 @@ def _get_sesion_por_codigo(codigo: str) -> Sesion:
     if sesion is None:
         abort(404)
     return sesion
+
+
+def _participante_de_sesion(sesion: Sesion) -> Participante | None:
+    """Devuelve el Participante de ESTA sesion segun la cookie, o None.
+
+    Defensa contra cookie cruzada: si la cookie tiene un participante de otra
+    sesion (o de ninguna), la limpia y devuelve None. El caller redirige al
+    ingreso.
+    """
+    participante_id = session.get("participante_id")
+    if participante_id is None:
+        return None
+
+    participante = db.session.get(Participante, participante_id)
+    if participante is None or participante.sesion_id != sesion.id:
+        session.pop("participante_id", None)
+        return None
+
+    return participante
+
+
+def _preguntas_ordenadas(sesion: Sesion) -> list:
+    """Preguntas de la evaluacion de la sesion, ordenadas por su campo orden."""
+    return sorted(sesion.evaluacion.preguntas, key=lambda p: p.orden)
 
 
 def _procesar_ingreso(sesion: Sesion):
@@ -114,3 +165,79 @@ def _procesar_ingreso(sesion: Sesion):
 
     session["participante_id"] = participante.id
     return redirect(url_for("participante.responder", codigo=sesion.codigo))
+
+
+def _procesar_respuestas(sesion: Sesion, participante: Participante, preguntas: list):
+    """Procesa el POST del cuestionario.
+
+    Lee una alternativa por pregunta (input name="pregunta_<id>"), valida que
+    esten todas respondidas y que cada alternativa elegida pertenezca a su
+    pregunta, persiste una Respuesta por pregunta, calcula el Resultado y
+    redirige al resultado.
+    """
+    # Recolectar la seleccion cruda (str) por pregunta.
+    seleccion = {}
+    for p in preguntas:
+        val = request.form.get(f"pregunta_{p.id}", "").strip()
+        if val:
+            seleccion[p.id] = val
+
+    # Validacion: todas las preguntas respondidas. Si falta alguna, re-render
+    # con lo que ya habia marcado (no se persiste nada parcial).
+    faltantes = [p for p in preguntas if p.id not in seleccion]
+    if faltantes:
+        flash("Debes responder todas las preguntas antes de enviar.", "danger")
+        return render_template(
+            "participante/responder.html",
+            sesion=sesion,
+            preguntas=preguntas,
+            seleccion=seleccion,
+        )
+
+    puntaje = 0
+    respuestas_a_crear = []
+    for p in preguntas:
+        try:
+            alt_id = int(seleccion[p.id])
+        except ValueError:
+            abort(400)
+
+        # Defensa anti-tampering: la alternativa elegida debe pertenecer a
+        # ESTA pregunta.
+        alternativa = next((a for a in p.alternativas if a.id == alt_id), None)
+        if alternativa is None:
+            abort(400)
+
+        if alternativa.es_correcta:
+            puntaje += 1
+
+        respuestas_a_crear.append(
+            Respuesta(
+                participante_id=participante.id,
+                pregunta_id=p.id,
+                alternativa_id=alternativa.id,
+            )
+        )
+
+    calificacion = calcular_calificacion(
+        puntaje=puntaje,
+        total=len(preguntas),
+        umbral=sesion.evaluacion.umbral_aprobacion,
+    )
+
+    for r in respuestas_a_crear:
+        db.session.add(r)
+    db.session.add(
+        Resultado(
+            participante_id=participante.id,
+            puntaje=puntaje,
+            total_preguntas=len(preguntas),
+            porcentaje=calificacion.porcentaje,
+            nota=calificacion.nota,
+            aprobado=calificacion.aprobado,
+        )
+    )
+    participante.finalizado_at = ahora_utc()
+    db.session.commit()
+
+    return redirect(url_for("participante.resultado", codigo=sesion.codigo))
