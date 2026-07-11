@@ -55,6 +55,88 @@
   </div>
 </div>
 
+<hr>
+
+<!-- Resultados agregados de la sesión (OE3) -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="h4 mb-0">Resultados</h2>
+  <a href="{{ url_for('evaluaciones.detalle_sesion', eval_id=evaluacion.id, sesion_id=sesion.id) }}"
+     class="btn btn-outline-secondary btn-sm">Actualizar</a>
+</div>
+
+{% if resumen.total_finalizados == 0 %}
+  <div class="alert alert-info mb-4">
+    Aún no hay resultados en esta sesión.
+    {% if resumen.total_participantes > 0 %}
+      {{ resumen.total_participantes }}
+      participante{{ 's' if resumen.total_participantes != 1 else '' }}
+      ingresó pero todavía nadie termina la evaluación.
+    {% else %}
+      Nadie ha ingresado todavía.
+    {% endif %}
+  </div>
+{% else %}
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+      <div class="card h-100 text-center">
+        <div class="card-body">
+          <p class="h2 mb-0">{{ "%.1f"|format(resumen.promedio_nota) }}</p>
+          <p class="text-muted small mb-0">Promedio de nota</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card h-100 text-center">
+        <div class="card-body">
+          <p class="h2 mb-0">{{ resumen.total_finalizados }}</p>
+          <p class="text-muted small mb-0">Finalizaron</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card h-100 text-center">
+        <div class="card-body">
+          <p class="h2 mb-0 text-success">{{ resumen.aprobados }}</p>
+          <p class="text-muted small mb-0">Aprobados</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card h-100 text-center">
+        <div class="card-body">
+          <p class="h2 mb-0 text-danger">{{ resumen.reprobados }}</p>
+          <p class="text-muted small mb-0">Reprobados</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="mb-1 text-muted small">
+    {{ resumen.porcentaje_aprobados }}% aprobados ·
+    promedio de logro {{ resumen.promedio_logro }}%
+  </p>
+  <div class="progress mb-2" style="height: 24px;">
+    {% if resumen.aprobados > 0 %}
+      <div class="progress-bar bg-success"
+           style="width: {{ resumen.porcentaje_aprobados }}%;">
+        {{ resumen.aprobados }}
+      </div>
+    {% endif %}
+    {% if resumen.reprobados > 0 %}
+      <div class="progress-bar bg-danger"
+           style="width: {{ resumen.porcentaje_reprobados }}%;">
+        {{ resumen.reprobados }}
+      </div>
+    {% endif %}
+  </div>
+
+  <p class="text-muted small mb-4">
+    {{ resumen.total_participantes }} ingresaron ·
+    {{ resumen.total_finalizados }} finalizaron{% if resumen.pendientes > 0 %} ·
+    {{ resumen.pendientes }} pendiente{{ 's' if resumen.pendientes != 1 else '' }}{% endif %}
+  </p>
+{% endif %}
+
 {% if sesion.estado == "abierta" %}
   <form method="POST"
         action="{{ url_for('evaluaciones.cerrar_sesion', eval_id=evaluacion.id, sesion_id=sesion.id) }}"

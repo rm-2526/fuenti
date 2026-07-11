@@ -8,6 +8,7 @@ from app import db
 from app.evaluaciones import bp
 from app.models import Alternativa, Evaluacion, Pregunta, Sesion
 from app.utils.sesion import generar_codigo_sesion
+from app.utils.estadisticas import resumir_resultados
 from app.models import ahora_utc
 
 
@@ -94,10 +95,12 @@ def abrir_sesion(eval_id):
 def detalle_sesion(eval_id, sesion_id):
     evaluacion = _get_evaluacion_propia(eval_id)
     sesion = _get_sesion_de_evaluacion(evaluacion, sesion_id)
+    resumen = _resumen_de_sesion(sesion)
     return render_template(
         "evaluaciones/detalle_sesion.html",
         evaluacion=evaluacion,
         sesion=sesion,
+        resumen=resumen,
     )
 
 
@@ -131,6 +134,18 @@ def _get_evaluacion_propia(eval_id: int) -> Evaluacion:
     if evaluacion.facilitador_id != current_user.id:
         abort(403)
     return evaluacion
+
+
+def _resumen_de_sesion(sesion: Sesion):
+    """Arma el resumen agregado de la sesion para el panel del facilitador.
+
+    Consulta los participantes y sus resultados y delega el calculo puro a
+    resumir_resultados (que no toca la BD). El caller pasa el resumen a la
+    plantilla.
+    """
+    participantes = sesion.participantes
+    resultados = [p.resultado for p in participantes if p.resultado is not None]
+    return resumir_resultados(resultados, total_participantes=len(participantes))
 
 
 def _get_sesion_de_evaluacion(evaluacion: Evaluacion, sesion_id: int) -> Sesion:

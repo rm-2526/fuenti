@@ -50,6 +50,35 @@ def _crear_sesion_directa(app, evaluacion_id, codigo="TESTCD", estado="abierta")
         return s.id
 
 
+def _agregar_participante_con_resultado(
+    app, sesion_id, hash_sufijo, nota, porcentaje, aprobado, finalizado=True
+):
+    """Inserta un Participante en la sesion directamente en BD.
+
+    Si finalizado=True, ademas le crea su Resultado. Si finalizado=False,
+    queda como alguien que ingreso pero no termino (pendiente).
+    El hash debe ser distinto por sesion (unique constraint), de ahi el sufijo.
+    """
+    from app.models import Participante, Resultado
+    with app.app_context():
+        p = Participante(sesion_id=sesion_id, identificador_hash=f"hash_{hash_sufijo}")
+        db.session.add(p)
+        db.session.flush()
+        if finalizado:
+            db.session.add(
+                Resultado(
+                    participante_id=p.id,
+                    puntaje=1,
+                    total_preguntas=1,
+                    porcentaje=porcentaje,
+                    nota=nota,
+                    aprobado=aprobado,
+                )
+            )
+        db.session.commit()
+        return p.id
+
+
 # ====================== Facilitador: abrir sesion ======================
 
 def test_facilitador_abre_sesion_de_evaluacion_propia(client, facilitador, app):
@@ -180,6 +209,70 @@ def test_sesion_de_otra_evaluacion_es_404(client, facilitador, app):
     # Pido la sesion de B pero como si fuera de A
     resp = client.get(f"/evaluaciones/{eval_a}/sesiones/{sesion_de_b}")
     assert resp.status_code == 404
+
+
+# ====================== Facilitador: panel de resultados (OE3) ======================
+
+def test_detalle_sesion_sin_resultados_muestra_estado_vacio(client, facilitador, app):
+    """Sesion sin nadie que haya terminado: se muestra el estado vacio en vez
+    de un promedio raro o un error por dividir entre cero."""
+    eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id)
+    sesion_id = _crear_sesion_directa(app, eval_id, codigo="PAN234")
+
+    _login(client)
+    resp = client.get(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}")
+    assert resp.status_code == 200
+    assert "Aún no hay resultados".encode("utf-8") in resp.data
+
+
+def test_detalle_sesion_muestra_agregados(client, facilitador, app):
+    """Con resultados cargados, el panel muestra el promedio y los conteos."""
+    eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id)
+    sesion_id = _crear_sesion_directa(app, eval_id, codigo="PAN235")
+    # 2 aprobados y 1 reprobado -> promedio (7.0 + 5.0 + 2.0) / 3 = 4.67 -> 4.7
+    _agregar_participante_con_resultado(app, sesion_id, "a", nota=7.0, porcentaje=100.0, aprobado=True)
+    _agregar_participante_con_resultado(app, sesion_id, "b", nota=5.0, porcentaje=70.0, aprobado=True)
+    _agregar_participante_con_resultado(app, sesion_id, "c", nota=2.0, porcentaje=20.0, aprobado=False)
+
+    _login(client)
+    resp = client.get(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}")
+    assert resp.status_code == 200
+    assert b"4.7" in resp.data                              # promedio de nota
+    assert "Aprobados".encode("utf-8") in resp.data
+    assert "Reprobados".encode("utf-8") in resp.data
+
+
+def test_detalle_sesion_cuenta_pendientes_y_no_ensucia_promedio(client, facilitador, app):
+    """Un participante que ingreso pero no finalizo se cuenta como pendiente
+    y NO entra al promedio de nota."""
+    eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id)
+    sesion_id = _crear_sesion_directa(app, eval_id, codigo="PAN236")
+    _agregar_participante_con_resultado(app, sesion_id, "a", nota=7.0, porcentaje=100.0, aprobado=True)
+    _agregar_participante_con_resultado(
+        app, sesion_id, "b", nota=0, porcentaje=0, aprobado=False, finalizado=False
+    )
+
+    _login(client)
+    resp = client.get(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}")
+    assert resp.status_code == 200
+    assert b"7.0" in resp.data                              # promedio solo del que finalizo
+    assert "pendiente".encode("utf-8") in resp.data
+
+
+def test_panel_de_resultados_solo_para_el_facilitador_dueno(client, facilitador, app):
+    """El panel vive en la ruta de detalle de sesion, que ya esta protegida:
+    un facilitador no puede ver los resultados de una sesion ajena."""
+    with app.app_context():
+        otro = Facilitador(email="otro@fuenti.cl", nombre="Otro")
+        otro.set_password("clave123")
+        db.session.add(otro)
+        db.session.flush()
+        eval_ajena = _crear_evaluacion_con_pregunta(app, otro.id, titulo="Ajena")
+        sesion_ajena = _crear_sesion_directa(app, eval_ajena, codigo="AJN235")
+
+    _login(client)
+    resp = client.get(f"/evaluaciones/{eval_ajena}/sesiones/{sesion_ajena}")
+    assert resp.status_code == 403
 
 
 # ====================== Participante: ingreso ======================
