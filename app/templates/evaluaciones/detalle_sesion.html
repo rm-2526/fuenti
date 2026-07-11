@@ -64,9 +64,10 @@
      class="btn btn-outline-secondary btn-sm">Actualizar</a>
 </div>
 
-{% if resumen.total_finalizados == 0 %}
-  <div class="alert alert-info mb-4">
-    Aún no hay resultados en esta sesión.
+{# Estado vacío: se muestra cuando todavía nadie finalizó. #}
+<div id="resultados-vacio" class="alert alert-info mb-4"
+     {% if resumen.total_finalizados > 0 %}hidden{% endif %}>
+  <span id="vacio-texto">Aún no hay resultados en esta sesión.
     {% if resumen.total_participantes > 0 %}
       {{ resumen.total_participantes }}
       participante{{ 's' if resumen.total_participantes != 1 else '' }}
@@ -74,13 +75,18 @@
     {% else %}
       Nadie ha ingresado todavía.
     {% endif %}
-  </div>
-{% else %}
+  </span>
+</div>
+
+{# Panel con datos: se muestra cuando hay al menos un finalizado. #}
+<div id="resultados-panel" {% if resumen.total_finalizados == 0 %}hidden{% endif %}>
   <div class="row g-3 mb-3">
     <div class="col-6 col-md-3">
       <div class="card h-100 text-center">
         <div class="card-body">
-          <p class="h2 mb-0">{{ "%.1f"|format(resumen.promedio_nota) }}</p>
+          <p class="h2 mb-0" id="stat-promedio-nota">
+            {{ "%.1f"|format(resumen.promedio_nota) if resumen.promedio_nota is not none else "—" }}
+          </p>
           <p class="text-muted small mb-0">Promedio de nota</p>
         </div>
       </div>
@@ -88,7 +94,7 @@
     <div class="col-6 col-md-3">
       <div class="card h-100 text-center">
         <div class="card-body">
-          <p class="h2 mb-0">{{ resumen.total_finalizados }}</p>
+          <p class="h2 mb-0" id="stat-finalizados">{{ resumen.total_finalizados }}</p>
           <p class="text-muted small mb-0">Finalizaron</p>
         </div>
       </div>
@@ -96,7 +102,7 @@
     <div class="col-6 col-md-3">
       <div class="card h-100 text-center">
         <div class="card-body">
-          <p class="h2 mb-0 text-success">{{ resumen.aprobados }}</p>
+          <p class="h2 mb-0 text-success" id="stat-aprobados">{{ resumen.aprobados }}</p>
           <p class="text-muted small mb-0">Aprobados</p>
         </div>
       </div>
@@ -104,7 +110,7 @@
     <div class="col-6 col-md-3">
       <div class="card h-100 text-center">
         <div class="card-body">
-          <p class="h2 mb-0 text-danger">{{ resumen.reprobados }}</p>
+          <p class="h2 mb-0 text-danger" id="stat-reprobados">{{ resumen.reprobados }}</p>
           <p class="text-muted small mb-0">Reprobados</p>
         </div>
       </div>
@@ -112,30 +118,26 @@
   </div>
 
   <p class="mb-1 text-muted small">
-    {{ resumen.porcentaje_aprobados }}% aprobados ·
-    promedio de logro {{ resumen.promedio_logro }}%
+    <span id="stat-pct-aprobados">{{ resumen.porcentaje_aprobados }}</span>% aprobados ·
+    promedio de logro <span id="stat-promedio-logro">{{ resumen.promedio_logro }}</span>%
   </p>
   <div class="progress mb-2" style="height: 24px;">
-    {% if resumen.aprobados > 0 %}
-      <div class="progress-bar bg-success"
-           style="width: {{ resumen.porcentaje_aprobados }}%;">
-        {{ resumen.aprobados }}
-      </div>
-    {% endif %}
-    {% if resumen.reprobados > 0 %}
-      <div class="progress-bar bg-danger"
-           style="width: {{ resumen.porcentaje_reprobados }}%;">
-        {{ resumen.reprobados }}
-      </div>
-    {% endif %}
+    <div id="barra-aprobados" class="progress-bar bg-success"
+         style="width: {{ resumen.porcentaje_aprobados }}%;">
+      {{ resumen.aprobados if resumen.aprobados > 0 else "" }}
+    </div>
+    <div id="barra-reprobados" class="progress-bar bg-danger"
+         style="width: {{ resumen.porcentaje_reprobados }}%;">
+      {{ resumen.reprobados if resumen.reprobados > 0 else "" }}
+    </div>
   </div>
 
-  <p class="text-muted small mb-4">
+  <p class="text-muted small mb-4" id="stat-conteos">
     {{ resumen.total_participantes }} ingresaron ·
     {{ resumen.total_finalizados }} finalizaron{% if resumen.pendientes > 0 %} ·
     {{ resumen.pendientes }} pendiente{{ 's' if resumen.pendientes != 1 else '' }}{% endif %}
   </p>
-{% endif %}
+</div>
 
 {% if sesion.estado == "abierta" %}
   <form method="POST"
@@ -144,4 +146,88 @@
     <button type="submit" class="btn btn-outline-danger">Cerrar sesión</button>
   </form>
 {% endif %}
+
+{#
+  Refresco automático del panel (polling): cada 10 segundos el navegador
+  pide el resumen a la URL de datos y actualiza los números sin recargar.
+  Deja de sondear cuando la sesión está cerrada. El botón "Actualizar" de
+  arriba sigue funcionando como respaldo si el navegador no ejecuta JavaScript.
+#}
+<script>
+(function () {
+  var url = "{{ url_for('evaluaciones.resumen_sesion_json', eval_id=evaluacion.id, sesion_id=sesion.id) }}";
+  var estadoInicial = "{{ sesion.estado }}";
+  var INTERVALO_MS = 10000;
+
+  var elVacio = document.getElementById("resultados-vacio");
+  var elVacioTexto = document.getElementById("vacio-texto");
+  var elPanel = document.getElementById("resultados-panel");
+  var elPromedioNota = document.getElementById("stat-promedio-nota");
+  var elFinalizados = document.getElementById("stat-finalizados");
+  var elAprobados = document.getElementById("stat-aprobados");
+  var elReprobados = document.getElementById("stat-reprobados");
+  var elPctAprobados = document.getElementById("stat-pct-aprobados");
+  var elPromedioLogro = document.getElementById("stat-promedio-logro");
+  var elBarraAprobados = document.getElementById("barra-aprobados");
+  var elBarraReprobados = document.getElementById("barra-reprobados");
+  var elConteos = document.getElementById("stat-conteos");
+
+  function plural(n) { return n === 1 ? "" : "s"; }
+
+  function actualizarPanel(d) {
+    if (d.total_finalizados === 0) {
+      var t = "Aún no hay resultados en esta sesión. ";
+      if (d.total_participantes > 0) {
+        t += d.total_participantes + " participante" + plural(d.total_participantes) +
+             " ingresó pero todavía nadie termina la evaluación.";
+      } else {
+        t += "Nadie ha ingresado todavía.";
+      }
+      elVacioTexto.textContent = t;
+      elVacio.hidden = false;
+      elPanel.hidden = true;
+      return;
+    }
+
+    elPromedioNota.textContent = d.promedio_nota.toFixed(1);
+    elFinalizados.textContent = d.total_finalizados;
+    elAprobados.textContent = d.aprobados;
+    elReprobados.textContent = d.reprobados;
+    elPctAprobados.textContent = d.porcentaje_aprobados;
+    elPromedioLogro.textContent = d.promedio_logro;
+
+    elBarraAprobados.style.width = d.porcentaje_aprobados + "%";
+    elBarraAprobados.textContent = d.aprobados > 0 ? d.aprobados : "";
+    elBarraReprobados.style.width = d.porcentaje_reprobados + "%";
+    elBarraReprobados.textContent = d.reprobados > 0 ? d.reprobados : "";
+
+    var c = d.total_participantes + " ingresaron · " + d.total_finalizados + " finalizaron";
+    if (d.pendientes > 0) {
+      c += " · " + d.pendientes + " pendiente" + plural(d.pendientes);
+    }
+    elConteos.textContent = c;
+
+    elVacio.hidden = true;
+    elPanel.hidden = false;
+  }
+
+  function sondear() {
+    fetch(url)
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d) return;
+        actualizarPanel(d);
+        if (d.estado !== "abierta") {
+          clearInterval(timer);  // sesión cerrada: no hay más resultados nuevos
+        }
+      })
+      .catch(function () { /* error de red puntual: reintentamos al próximo ciclo */ });
+  }
+
+  var timer = null;
+  if (estadoInicial === "abierta") {
+    timer = setInterval(sondear, INTERVALO_MS);
+  }
+})();
+</script>
 {% endblock %}

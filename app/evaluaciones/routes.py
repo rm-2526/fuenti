@@ -1,6 +1,7 @@
 import re
+from dataclasses import asdict
 
-from flask import abort, flash, redirect, render_template, request, url_for
+from flask import abort, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from sqlalchemy.exc import IntegrityError
 
@@ -102,6 +103,25 @@ def detalle_sesion(eval_id, sesion_id):
         sesion=sesion,
         resumen=resumen,
     )
+
+
+@bp.route("/<int:eval_id>/sesiones/<int:sesion_id>/resumen")
+@login_required
+def resumen_sesion_json(eval_id, sesion_id):
+    """Devuelve el resumen agregado de la sesion en formato JSON.
+
+    Lo consume el refresco automatico (polling) del panel: cada pocos segundos
+    el navegador pide esta URL y actualiza los numeros sin recargar la pagina.
+    Misma proteccion que el detalle de sesion: solo el facilitador dueno de la
+    evaluacion (si no, 403). Incluye el estado de la sesion para que el
+    navegador sepa cuando dejar de sondear (sesion cerrada -> no hay mas
+    resultados nuevos).
+    """
+    evaluacion = _get_evaluacion_propia(eval_id)
+    sesion = _get_sesion_de_evaluacion(evaluacion, sesion_id)
+    datos = asdict(_resumen_de_sesion(sesion))
+    datos["estado"] = sesion.estado
+    return jsonify(datos)
 
 
 @bp.route("/<int:eval_id>/sesiones/<int:sesion_id>/cerrar", methods=["POST"])

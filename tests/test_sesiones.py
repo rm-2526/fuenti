@@ -275,6 +275,76 @@ def test_panel_de_resultados_solo_para_el_facilitador_dueno(client, facilitador,
     assert resp.status_code == 403
 
 
+# ====================== Resumen JSON (para el refresco automatico) ======================
+
+def test_resumen_json_devuelve_agregados(client, facilitador, app):
+    """La URL de datos entrega el resumen en JSON, con los mismos numeros que
+    el panel. La consume el refresco automatico (polling)."""
+    eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id)
+    sesion_id = _crear_sesion_directa(app, eval_id, codigo="JSN234")
+    _agregar_participante_con_resultado(app, sesion_id, "a", nota=7.0, porcentaje=100.0, aprobado=True)
+    _agregar_participante_con_resultado(app, sesion_id, "b", nota=2.0, porcentaje=20.0, aprobado=False)
+
+    _login(client)
+    resp = client.get(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/resumen")
+    assert resp.status_code == 200
+    datos = resp.get_json()
+    assert datos["total_finalizados"] == 2
+    assert datos["aprobados"] == 1
+    assert datos["reprobados"] == 1
+    assert datos["promedio_nota"] == 4.5   # (7.0 + 2.0) / 2
+    assert datos["estado"] == "abierta"
+
+
+def test_resumen_json_sin_resultados(client, facilitador, app):
+    eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id)
+    sesion_id = _crear_sesion_directa(app, eval_id, codigo="JSN235")
+
+    _login(client)
+    resp = client.get(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/resumen")
+    assert resp.status_code == 200
+    datos = resp.get_json()
+    assert datos["total_finalizados"] == 0
+    assert datos["promedio_nota"] is None
+
+
+def test_resumen_json_refleja_estado_cerrado(client, facilitador, app):
+    """El estado viaja en el JSON: asi el navegador sabe cuando dejar de
+    sondear (sesion cerrada -> no llegan mas resultados)."""
+    eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id)
+    sesion_id = _crear_sesion_directa(app, eval_id, codigo="JSN236", estado="cerrada")
+
+    _login(client)
+    resp = client.get(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/resumen")
+    assert resp.status_code == 200
+    assert resp.get_json()["estado"] == "cerrada"
+
+
+def test_resumen_json_solo_para_el_dueno(client, facilitador, app):
+    """La URL de datos esta igual de protegida que el panel: un facilitador no
+    puede leer el resumen de una sesion ajena."""
+    with app.app_context():
+        otro = Facilitador(email="otro@fuenti.cl", nombre="Otro")
+        otro.set_password("clave123")
+        db.session.add(otro)
+        db.session.flush()
+        eval_ajena = _crear_evaluacion_con_pregunta(app, otro.id, titulo="Ajena")
+        sesion_ajena = _crear_sesion_directa(app, eval_ajena, codigo="JSN237")
+
+    _login(client)
+    resp = client.get(f"/evaluaciones/{eval_ajena}/sesiones/{sesion_ajena}/resumen")
+    assert resp.status_code == 403
+
+
+def test_resumen_json_requiere_login(client, facilitador, app):
+    """Sin login no se puede leer la URL de datos (no responde 200 con el JSON)."""
+    eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id)
+    sesion_id = _crear_sesion_directa(app, eval_id, codigo="JSN238")
+
+    resp = client.get(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/resumen")
+    assert resp.status_code != 200
+
+
 # ====================== Participante: ingreso ======================
 
 def test_get_ingreso_de_sesion_abierta_renderiza_form(client, facilitador, app):
