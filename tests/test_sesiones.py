@@ -51,7 +51,8 @@ def _crear_sesion_directa(app, evaluacion_id, codigo="TESTCD", estado="abierta")
 
 
 def _agregar_participante_con_resultado(
-    app, sesion_id, hash_sufijo, nota, porcentaje, aprobado, finalizado=True
+    app, sesion_id, hash_sufijo, nota, porcentaje, aprobado, finalizado=True,
+    nombre=None,
 ):
     """Inserta un Participante en la sesion directamente en BD.
 
@@ -61,7 +62,9 @@ def _agregar_participante_con_resultado(
     """
     from app.models import Participante, Resultado
     with app.app_context():
-        p = Participante(sesion_id=sesion_id, identificador_hash=f"hash_{hash_sufijo}")
+        p = Participante(
+            sesion_id=sesion_id, identificador_hash=f"hash_{hash_sufijo}", nombre=nombre
+        )
         db.session.add(p)
         db.session.flush()
         if finalizado:
@@ -570,3 +573,216 @@ def test_responder_de_sesion_cerrada_muestra_aviso(client, facilitador, app):
     resp = client.get("/sesion/CRD234/responder")
     assert resp.status_code == 200
     assert "cerrada".encode("utf-8") in resp.data.lower()
+
+# ====================== Lista por participante (informe / CSV) ======================
+
+def _pregunta_y_alternativas(app, eval_id):
+    """Devuelve (pregunta_id, {texto: alternativa_id}) de la 1a pregunta."""
+    with app.app_context():
+        p = db.session.query(Pregunta).filter_by(evaluacion_id=eval_id).first()
+        alts = {a.texto: a.id for a in p.alternativas}
+        return p.id, alts
+
+
+def test_detalle_sesion_lista_participantes_con_nombre(client, facilitador, app):
+    """La tabla por participante muestra el nombre, el enlace al informe y el
+    boton de descarga CSV."""
+    eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id)
+    sesion_id = _crear_sesion_directa(app, eval_id, codigo="LST234")
+    _agregar_participante_con_resultado(
+        app, sesion_id, "a", nota=7.0, porcentaje=100.0, aprobado=True, nombre="Ana Soto"
+    )
+
+    _login(client)
+    resp = client.get(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}")
+    assert resp.status_code == 200
+    assert "Ana Soto".encode("utf-8") in resp.data
+    assert "Detalle por participante".encode("utf-8") in resp.data
+    assert "Ver informe".encode("utf-8") in resp.data
+    assert "Descargar CSV".encode("utf-8") in resp.data
+
+
+def test_detalle_sesion_lista_marca_pendiente(client, facilitador, app):
+    eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id)
+    sesion_id = _crear_sesion_directa(app, eval_id, codigo="LST235")
+    _agregar_participante_con_resultado(
+        app, sesion_id, "a", nota=0, porcentaje=0, aprobado=False,
+        finalizado=False, nombre="Sin Terminar",
+    )
+
+    _login(client)
+    resp = client.get(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}")
+    assert resp.status_code == 200
+    assert "Sin Terminar".encode("utf-8") in resp.data
+    assert b"Pendiente" in resp.data
+
+
+# ====================== Informe individual ======================
+
+def test_informe_individual_muestra_desglose(client, facilitador, app):
+    """El informe individual muestra el nombre y marca las respuestas
+    correctas/incorrectas."""
+    eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id, titulo="Suma")
+    sesion_id = _crear_sesion_directa(app, eval_id, codigo="INF234")
+    pid, alts = _pregunta_y_alternativas(app, eval_id)
+
+    # Participante ingresa y responde MAL (elige "5" en vez de "4")
+    client.post(
+        "/sesion/INF234/ingreso", data={"rut": RUT_VALIDO, "nombre": "Ana Soto"}
+    )
+    client.post("/sesion/INF234/responder", data={f"pregunta_{pid}": alts["5"]})
+
+    with app.app_context():
+        part_id = (
+            db.session.query(Participante).filter_by(sesion_id=sesion_id).first().id
+        )
+
+    _login(client)
+    resp = client.get(
+        f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/participantes/{part_id}/informe"
+    )
+    assert resp.status_code == 200
+    assert "Ana Soto".encode("utf-8") in resp.data
+    assert b"Incorrecta" in resp.data          # eligio la equivocada
+    assert b"Detalle de respuestas" in resp.data
+
+
+def test_informe_participante_sin_finalizar_muestra_aviso(client, facilitador, app):
+    eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id)
+    sesion_id = _crear_sesion_directa(app, eval_id, codigo="INF235")
+    # Ingresa pero NO responde -> sin resultado
+    client.post(
+        "/sesion/INF235/ingreso", data={"rut": RUT_VALIDO, "nombre": "Ana Soto"}
+    )
+    with app.app_context():
+        part_id = (
+            db.session.query(Participante).filter_by(sesion_id=sesion_id).first().id
+        )
+
+    _login(client)
+    resp = client.get(
+        f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/participantes/{part_id}/informe"
+    )
+    assert resp.status_code == 200
+    assert b"no finaliza" in resp.data
+
+
+def test_informe_individual_participante_de_otra_sesion_es_404(client, facilitador, app):
+    """Pedir el informe de un participante que no pertenece a esa sesion es 404."""
+    eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id)
+    sesion_a = _crear_sesion_directa(app, eval_id, codigo="INFA34")
+    sesion_b = _crear_sesion_directa(app, eval_id, codigo="INFB34")
+    pid_b = _agregar_participante_con_resultado(
+        app, sesion_b, "x", nota=7.0, porcentaje=100.0, aprobado=True, nombre="Ana"
+    )
+
+    _login(client)
+    resp = client.get(
+        f"/evaluaciones/{eval_id}/sesiones/{sesion_a}/participantes/{pid_b}/informe"
+    )
+    assert resp.status_code == 404
+
+
+def test_informe_individual_solo_para_dueno(client, facilitador, app):
+    with app.app_context():
+        otro = Facilitador(email="otro@fuenti.cl", nombre="Otro")
+        otro.set_password("clave123")
+        db.session.add(otro)
+        db.session.flush()
+        eval_ajena = _crear_evaluacion_con_pregunta(app, otro.id, titulo="Ajena")
+        sesion_ajena = _crear_sesion_directa(app, eval_ajena, codigo="INFAJ4")
+        pid = _agregar_participante_con_resultado(
+            app, sesion_ajena, "x", nota=7.0, porcentaje=100.0, aprobado=True, nombre="Ana"
+        )
+
+    _login(client)  # entra como `facilitador`, no como `otro`
+    resp = client.get(
+        f"/evaluaciones/{eval_ajena}/sesiones/{sesion_ajena}/participantes/{pid}/informe"
+    )
+    assert resp.status_code == 403
+
+
+def test_informe_individual_requiere_login(client, facilitador, app):
+    eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id)
+    sesion_id = _crear_sesion_directa(app, eval_id, codigo="INFL34")
+    pid = _agregar_participante_con_resultado(
+        app, sesion_id, "x", nota=7.0, porcentaje=100.0, aprobado=True, nombre="Ana"
+    )
+
+    resp = client.get(
+        f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/participantes/{pid}/informe"
+    )
+    assert resp.status_code != 200
+
+
+# ====================== Exportacion CSV ======================
+
+def test_export_csv_cabecera_y_tipo(client, facilitador, app):
+    eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id)
+    sesion_id = _crear_sesion_directa(app, eval_id, codigo="CSV234")
+    _agregar_participante_con_resultado(
+        app, sesion_id, "a", nota=7.0, porcentaje=100.0, aprobado=True, nombre="Ana Soto"
+    )
+
+    _login(client)
+    resp = client.get(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/export.csv")
+    assert resp.status_code == 200
+    assert resp.mimetype == "text/csv"
+    assert "attachment" in resp.headers.get("Content-Disposition", "")
+    cuerpo = resp.get_data(as_text=True)
+    assert "Nombre" in cuerpo and "Aprobado" in cuerpo   # cabecera
+    assert "Ana Soto" in cuerpo
+    assert "7.0" in cuerpo
+
+
+def test_export_csv_una_fila_por_participante(client, facilitador, app):
+    eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id)
+    sesion_id = _crear_sesion_directa(app, eval_id, codigo="CSV235")
+    _agregar_participante_con_resultado(
+        app, sesion_id, "a", nota=7.0, porcentaje=100.0, aprobado=True, nombre="Ana"
+    )
+    _agregar_participante_con_resultado(
+        app, sesion_id, "b", nota=2.0, porcentaje=20.0, aprobado=False, nombre="Beto"
+    )
+
+    _login(client)
+    resp = client.get(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/export.csv")
+    lineas = [l for l in resp.get_data(as_text=True).strip().splitlines() if l.strip()]
+    assert len(lineas) == 3   # 1 cabecera + 2 participantes
+    cuerpo = resp.get_data(as_text=True)
+    assert "Ana" in cuerpo and "Beto" in cuerpo
+
+
+def test_export_csv_sin_participantes_solo_cabecera(client, facilitador, app):
+    eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id)
+    sesion_id = _crear_sesion_directa(app, eval_id, codigo="CSV236")
+
+    _login(client)
+    resp = client.get(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/export.csv")
+    assert resp.status_code == 200
+    lineas = [l for l in resp.get_data(as_text=True).strip().splitlines() if l.strip()]
+    assert len(lineas) == 1   # solo la cabecera
+
+
+def test_export_csv_solo_para_dueno(client, facilitador, app):
+    with app.app_context():
+        otro = Facilitador(email="otro@fuenti.cl", nombre="Otro")
+        otro.set_password("clave123")
+        db.session.add(otro)
+        db.session.flush()
+        eval_ajena = _crear_evaluacion_con_pregunta(app, otro.id, titulo="Ajena")
+        sesion_ajena = _crear_sesion_directa(app, eval_ajena, codigo="CSVAJ4")
+
+    _login(client)
+    resp = client.get(
+        f"/evaluaciones/{eval_ajena}/sesiones/{sesion_ajena}/export.csv"
+    )
+    assert resp.status_code == 403
+
+
+def test_export_csv_requiere_login(client, facilitador, app):
+    eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id)
+    sesion_id = _crear_sesion_directa(app, eval_id, codigo="CSVL34")
+
+    resp = client.get(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/export.csv")
+    assert resp.status_code != 200

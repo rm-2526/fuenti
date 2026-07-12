@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Informe individual · Fuenti{% endblock %}
+
+{% block content %}
+{#
+  Estilos solo para imprimir: al hacer "Imprimir" (Ctrl+P) o "Guardar como PDF"
+  se esconden la barra de navegacion y los botones, para que el PDF salga limpio.
+#}
+<style>
+  @media print {
+    .navbar { display: none !important; }
+    .no-print { display: none !important; }
+    body { background: #fff !important; }
+  }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-3 no-print">
+  <a href="{{ url_for('evaluaciones.detalle_sesion', eval_id=evaluacion.id, sesion_id=sesion.id) }}"
+     class="btn btn-link">← Volver a la sesión</a>
+  <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print();">
+    Imprimir / Guardar como PDF
+  </button>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <h1 class="h4 mb-1">Informe individual</h1>
+    <p class="text-muted mb-4">{{ evaluacion.titulo }}</p>
+
+    <div class="row mb-4">
+      <div class="col-sm-6">
+        <p class="mb-1 text-muted small">Participante</p>
+        <p class="h5 mb-1">{{ participante.nombre or "(sin nombre)" }}</p>
+        <p class="text-muted small font-monospace mb-0">
+          {{ participante.identificador_hash[:10] }}…
+        </p>
+      </div>
+      <div class="col-sm-6">
+        <p class="mb-1 text-muted small">Sesión</p>
+        <p class="font-monospace mb-1">{{ sesion.codigo }}</p>
+        {% if participante.finalizado_at %}
+          <p class="text-muted small mb-0">
+            Finalizó: {{ participante.finalizado_at.strftime('%Y-%m-%d %H:%M') }} UTC
+          </p>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if resultado %}
+      <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+          <div class="border rounded text-center p-3">
+            <p class="h2 mb-0">{{ "%.1f"|format(resultado.nota) }}</p>
+            <p class="text-muted small mb-0">Nota</p>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="border rounded text-center p-3">
+            <p class="h2 mb-0">{{ resultado.puntaje }}/{{ resultado.total_preguntas }}</p>
+            <p class="text-muted small mb-0">Correctas</p>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="border rounded text-center p-3">
+            <p class="h2 mb-0">{{ "%.1f"|format(resultado.porcentaje) }}%</p>
+            <p class="text-muted small mb-0">Logro</p>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="border rounded text-center p-3">
+            {% if resultado.aprobado %}
+              <p class="h5 mb-0 text-success">Aprobado</p>
+            {% else %}
+              <p class="h5 mb-0 text-danger">Reprobado</p>
+            {% endif %}
+            <p class="text-muted small mb-0">Resultado</p>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="h5 mb-3">Detalle de respuestas</h2>
+      <div class="table-responsive">
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Pregunta</th>
+              <th>Su respuesta</th>
+              <th>Correcta</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for linea in desglose %}
+              <tr>
+                <td>{{ linea.orden }}</td>
+                <td>{{ linea.enunciado }}</td>
+                <td>{{ linea.elegida }}</td>
+                <td>{{ linea.correcta }}</td>
+                <td>
+                  {% if linea.acerto %}
+                    <span class="badge bg-success">Correcta</span>
+                  {% else %}
+                    <span class="badge bg-danger">Incorrecta</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="alert alert-info mb-0">
+        Este participante ingresó pero aún no finaliza la evaluación, así que
+        todavía no tiene calificación ni detalle de respuestas.
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

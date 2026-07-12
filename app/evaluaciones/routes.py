@@ -1,15 +1,32 @@
+import csv
+import io
 import re
 from dataclasses import asdict
 
-from flask import abort, flash, jsonify, redirect, render_template, request, url_for
+from flask import (
+    Response,
+    abort,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 from flask_login import current_user, login_required
 from sqlalchemy.exc import IntegrityError
 
 from app import db
 from app.evaluaciones import bp
-from app.models import Alternativa, Evaluacion, Pregunta, Sesion
+from app.models import Alternativa, Evaluacion, Participante, Pregunta, Sesion
 from app.utils.sesion import generar_codigo_sesion
 from app.utils.estadisticas import resumir_resultados
+from app.utils.reporte import (
+    ENCABEZADOS_CSV,
+    desglose_individual,
+    filas_csv_sesion,
+    filas_informe_sesion,
+)
 from app.models import ahora_utc
 
 
@@ -97,11 +114,13 @@ def detalle_sesion(eval_id, sesion_id):
     evaluacion = _get_evaluacion_propia(eval_id)
     sesion = _get_sesion_de_evaluacion(evaluacion, sesion_id)
     resumen = _resumen_de_sesion(sesion)
+    participantes = filas_informe_sesion(_participantes_ordenados(sesion))
     return render_template(
         "evaluaciones/detalle_sesion.html",
         evaluacion=evaluacion,
         sesion=sesion,
         resumen=resumen,
+        participantes=participantes,
     )
 
 
@@ -122,6 +141,62 @@ def resumen_sesion_json(eval_id, sesion_id):
     datos = asdict(_resumen_de_sesion(sesion))
     datos["estado"] = sesion.estado
     return jsonify(datos)
+
+
+@bp.route(
+    "/<int:eval_id>/sesiones/<int:sesion_id>/participantes/<int:participante_id>/informe"
+)
+@login_required
+def informe_individual(eval_id, sesion_id, participante_id):
+    """Informe individual de un participante: su calificacion y el detalle
+    pregunta-por-pregunta (que eligio, cual era la correcta, si acerto).
+
+    Misma proteccion que el resto: solo el facilitador dueno (si no, 403) y 404
+    si el participante no pertenece a esa sesion. La pagina esta estilada para
+    imprimir: el facilitador puede usar 'Imprimir -> Guardar como PDF'.
+    """
+    evaluacion = _get_evaluacion_propia(eval_id)
+    sesion = _get_sesion_de_evaluacion(evaluacion, sesion_id)
+    participante = _get_participante_de_sesion(sesion, participante_id)
+
+    # Preguntas ordenadas y la alternativa que eligio en cada una.
+    preguntas = sorted(evaluacion.preguntas, key=lambda p: p.orden)
+    elegidas = {r.pregunta_id: r.alternativa_id for r in participante.respuestas}
+    desglose = desglose_individual(preguntas, elegidas)
+
+    return render_template(
+        "evaluaciones/informe_individual.html",
+        evaluacion=evaluacion,
+        sesion=sesion,
+        participante=participante,
+        resultado=participante.resultado,
+        desglose=desglose,
+    )
+
+
+@bp.route("/<int:eval_id>/sesiones/<int:sesion_id>/export.csv")
+@login_required
+def exportar_csv(eval_id, sesion_id):
+    """Descarga la sesion como CSV (una fila por participante).
+
+    CSV = tabla de datos que se abre en Excel. Se le antepone un BOM para que
+    Excel muestre bien los acentos. Mismos guards de dueno/login que el detalle.
+    """
+    evaluacion = _get_evaluacion_propia(eval_id)
+    sesion = _get_sesion_de_evaluacion(evaluacion, sesion_id)
+
+    buffer = io.StringIO()
+    buffer.write("\ufeff")  # BOM: ayuda a Excel a leer UTF-8 (acentos)
+    escritor = csv.writer(buffer)
+    escritor.writerow(ENCABEZADOS_CSV)
+    escritor.writerows(filas_csv_sesion(_participantes_ordenados(sesion)))
+
+    nombre_archivo = f"sesion_{sesion.codigo}.csv"
+    return Response(
+        buffer.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{nombre_archivo}"'},
+    )
 
 
 @bp.route("/<int:eval_id>/sesiones/<int:sesion_id>/cerrar", methods=["POST"])
@@ -176,6 +251,22 @@ def _get_sesion_de_evaluacion(evaluacion: Evaluacion, sesion_id: int) -> Sesion:
     if sesion is None or sesion.evaluacion_id != evaluacion.id:
         abort(404)
     return sesion
+
+
+def _get_participante_de_sesion(sesion: Sesion, participante_id: int) -> Participante:
+    """404 si el participante no pertenece a esa sesion.
+    El chequeo de duenio ya esta hecho por _get_evaluacion_propia.
+    """
+    participante = db.session.get(Participante, participante_id)
+    if participante is None or participante.sesion_id != sesion.id:
+        abort(404)
+    return participante
+
+
+def _participantes_ordenados(sesion: Sesion) -> list:
+    """Participantes de la sesion ordenados por su ingreso (orden estable para
+    la lista y el CSV: el #1 es el primero que entro)."""
+    return sorted(sesion.participantes, key=lambda p: p.ingreso_at)
 
 
 def _crear_sesion_con_codigo_unico(evaluacion_id: int) -> Sesion:

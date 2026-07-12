@@ -139,6 +139,71 @@
   </p>
 </div>
 
+<hr>
+
+<!-- Detalle por participante (OE3): lista + informe individual + CSV -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="h4 mb-0">Detalle por participante</h2>
+  {% if participantes %}
+    <a href="{{ url_for('evaluaciones.exportar_csv', eval_id=evaluacion.id, sesion_id=sesion.id) }}"
+       class="btn btn-outline-primary btn-sm">Descargar CSV</a>
+  {% endif %}
+</div>
+
+{% if participantes %}
+  <div class="table-responsive mb-2">
+    <table class="table table-sm align-middle">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Nombre</th>
+          <th>Estado</th>
+          <th class="text-end">Nota</th>
+          <th class="text-end">% de logro</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in participantes %}
+          <tr>
+            <td>{{ p.orden }}</td>
+            <td>
+              {{ p.nombre }}
+              <span class="text-muted small font-monospace d-block">{{ p.hash_corto }}…</span>
+            </td>
+            <td>
+              {% if p.finalizado %}
+                {% if p.aprobado %}
+                  <span class="badge bg-success">Aprobado</span>
+                {% else %}
+                  <span class="badge bg-danger">Reprobado</span>
+                {% endif %}
+              {% else %}
+                <span class="badge bg-secondary">Pendiente</span>
+              {% endif %}
+            </td>
+            <td class="text-end">{{ "%.1f"|format(p.nota) if p.nota is not none else "—" }}</td>
+            <td class="text-end">{{ "%.1f"|format(p.porcentaje) if p.porcentaje is not none else "—" }}%</td>
+            <td class="text-end">
+              {% if p.finalizado %}
+                <a href="{{ url_for('evaluaciones.informe_individual', eval_id=evaluacion.id, sesion_id=sesion.id, participante_id=p.id) }}"
+                   class="btn btn-link btn-sm p-0">Ver informe</a>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="text-muted small mb-4">
+    Esta lista se actualiza al recargar la página o con el botón «Actualizar» de
+    arriba (el refresco automático de cada 10 s solo mueve los números del
+    resumen, no la tabla).
+  </p>
+{% else %}
+  <p class="text-muted mb-4">Todavía no ha ingresado ningún participante.</p>
+{% endif %}
+
 {% if sesion.estado == "abierta" %}
   <form method="POST"
         action="{{ url_for('evaluaciones.cerrar_sesion', eval_id=evaluacion.id, sesion_id=sesion.id) }}"
