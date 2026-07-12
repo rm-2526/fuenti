@@ -25,11 +25,11 @@
         </p>
 
         <p class="mb-1 text-muted">Abierta</p>
-        <p class="mb-3">{{ sesion.abierta_at.strftime('%Y-%m-%d %H:%M') }} UTC</p>
+        <p class="mb-3">{{ sesion.abierta_at | hora_local }} (hora de Chile)</p>
 
         {% if sesion.cerrada_at %}
           <p class="mb-1 text-muted">Cerrada</p>
-          <p class="mb-3">{{ sesion.cerrada_at.strftime('%Y-%m-%d %H:%M') }} UTC</p>
+          <p class="mb-3">{{ sesion.cerrada_at | hora_local }} (hora de Chile)</p>
         {% endif %}
       </div>
 

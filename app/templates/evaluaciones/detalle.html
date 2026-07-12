@@ -8,7 +8,7 @@
 
 <p class="text-muted">
   Umbral de aprobación: <strong>{{ evaluacion.umbral_aprobacion }}%</strong>
-  · Creada: {{ evaluacion.created_at.strftime('%Y-%m-%d %H:%M') }}
+  · Creada: {{ evaluacion.created_at | hora_local }}
   · Preguntas: <strong>{{ evaluacion.preguntas|length }}</strong>
 </p>
 
@@ -52,10 +52,10 @@
               <span class="badge bg-secondary">Cerrada</span>
             {% endif %}
           </td>
-          <td>{{ s.abierta_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td>{{ s.abierta_at | hora_local }}</td>
           <td>
             {% if s.cerrada_at %}
-              {{ s.cerrada_at.strftime('%Y-%m-%d %H:%M') }}
+              {{ s.cerrada_at | hora_local }}
             {% else %}
               <span class="text-muted">—</span>
             {% endif %}

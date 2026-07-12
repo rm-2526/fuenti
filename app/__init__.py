@@ -1,3 +1,6 @@
+from datetime import timezone
+from zoneinfo import ZoneInfo
+
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
@@ -17,6 +20,24 @@ login_manager.login_view = "auth.login"
 login_manager.login_message = "Inicia sesión para acceder a esta página."
 login_manager.login_message_category = "warning"
 
+# Zona horaria de Chile. Se usa America/Santiago (y no un "-4" fijo) para que
+# el cambio de horario de verano se ajuste solo.
+ZONA_CHILE = ZoneInfo("America/Santiago")
+
+
+def hora_local(dt, fmt: str = "%Y-%m-%d %H:%M") -> str:
+    """Convierte una fecha/hora guardada en UTC a hora de Chile y la formatea.
+
+    Las fechas se guardan en UTC. Al leerlas de la BD suelen venir 'ingenuas'
+    (sin zona); aca se asume que son UTC y se convierten a America/Santiago.
+    Devuelve "" si dt es None (p. ej. una sesion que aun no se cierra).
+    """
+    if dt is None:
+        return ""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(ZONA_CHILE).strftime(fmt)
+
 
 def create_app(config_class: type = Config) -> Flask:
     app = Flask(__name__)
@@ -25,6 +46,9 @@ def create_app(config_class: type = Config) -> Flask:
     db.init_app(app)
     migrate.init_app(app, db)
     login_manager.init_app(app)
+
+    # Filtro de plantilla: {{ fecha | hora_local }} muestra la hora en Chile.
+    app.jinja_env.filters["hora_local"] = hora_local
 
     # Importar modelos para que Alembic los detecte
     from app import models  # noqa: F401

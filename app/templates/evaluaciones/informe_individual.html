@@ -41,7 +41,7 @@
         <p class="font-monospace mb-1">{{ sesion.codigo }}</p>
         {% if participante.finalizado_at %}
           <p class="text-muted small mb-0">
-            Finalizó: {{ participante.finalizado_at.strftime('%Y-%m-%d %H:%M') }} UTC
+            Finalizó: {{ participante.finalizado_at | hora_local }} (hora de Chile)
           </p>
         {% endif %}
       </div>
