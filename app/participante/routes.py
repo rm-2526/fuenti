@@ -34,7 +34,7 @@ def ingreso(codigo):
     if request.method == "POST":
         return _procesar_ingreso(sesion)
 
-    return render_template("participante/ingreso.html", sesion=sesion, rut="")
+    return render_template("participante/ingreso.html", sesion=sesion, rut="", nombre="")
 
 
 @bp.route("/<codigo>/responder", methods=["GET", "POST"])
@@ -131,15 +131,30 @@ def _procesar_ingreso(sesion: Sesion):
     uno nuevo, deja id en flask.session y redirige al responder.
     """
     rut_input = request.form.get("rut", "").strip()
+    nombre_input = request.form.get("nombre", "").strip()
+
+    # Nombre y apellido es obligatorio: es la etiqueta legible del informe del
+    # facilitador (los reportes para terceros -RRHH u otros- necesitan leer
+    # nombres). El RUT igual se hashea; el nombre no reemplaza esa proteccion.
+    if not nombre_input:
+        flash("Debes ingresar tu nombre y apellido.", "danger")
+        return render_template(
+            "participante/ingreso.html", sesion=sesion, rut=rut_input, nombre=""
+        )
 
     if not rut_input:
         flash("Debes ingresar tu RUT.", "danger")
-        return render_template("participante/ingreso.html", sesion=sesion, rut="")
+        return render_template(
+            "participante/ingreso.html", sesion=sesion, rut="", nombre=nombre_input
+        )
 
     if not validar_rut(rut_input):
         flash("RUT inválido. Revisa el formato (ej: 12.345.678-5).", "danger")
         return render_template(
-            "participante/ingreso.html", sesion=sesion, rut=rut_input
+            "participante/ingreso.html",
+            sesion=sesion,
+            rut=rut_input,
+            nombre=nombre_input,
         )
 
     # Hash con salt leido de config (regla 15 del handoff: el caller lee
@@ -159,8 +174,13 @@ def _procesar_ingreso(sesion: Sesion):
         participante = Participante(
             sesion_id=sesion.id,
             identificador_hash=identificador_hash,
+            nombre=nombre_input,
         )
         db.session.add(participante)
+        db.session.commit()
+    elif participante.nombre != nombre_input:
+        # Reingreso: si corrigio su nombre, lo actualizamos (no crea otro).
+        participante.nombre = nombre_input
         db.session.commit()
 
     session["participante_id"] = participante.id

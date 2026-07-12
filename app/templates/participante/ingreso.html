@@ -10,10 +10,22 @@
           Sesión: <span class="font-monospace">{{ sesion.codigo }}</span>
         </p>
 
-        <p>Ingresa tu RUT para comenzar la evaluación.</p>
+        <p>Ingresa tu nombre y tu RUT para comenzar la evaluación.</p>
 
         <form method="POST"
               action="{{ url_for('participante.ingreso', codigo=sesion.codigo) }}">
+          <div class="mb-3">
+            <label for="nombre" class="form-label">Nombre y apellido</label>
+            <input type="text"
+                   class="form-control"
+                   id="nombre"
+                   name="nombre"
+                   value="{{ nombre }}"
+                   placeholder="Ej: Juan Pérez González"
+                   autocomplete="off"
+                   autofocus
+                   required>
+          </div>
           <div class="mb-3">
             <label for="rut" class="form-label">RUT</label>
             <input type="text"
@@ -23,7 +35,6 @@
                    value="{{ rut }}"
                    placeholder="12.345.678-5"
                    autocomplete="off"
-                   autofocus
                    required>
             <div class="form-text">
               Puedes escribirlo con puntos y guion, o sin nada.

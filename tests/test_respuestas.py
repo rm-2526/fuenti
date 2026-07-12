@@ -73,9 +73,11 @@ def _abrir_sesion(app, eval_id, codigo="RESP34", estado="abierta"):
         return s.id
 
 
-def _ingresar(client, codigo, rut=RUT_VALIDO):
+def _ingresar(client, codigo, rut=RUT_VALIDO, nombre="Juan Perez"):
     """Ingresa al participante (setea la cookie participante_id)."""
-    return client.post(f"/sesion/{codigo}/ingreso", data={"rut": rut})
+    return client.post(
+        f"/sesion/{codigo}/ingreso", data={"rut": rut, "nombre": nombre}
+    )
 
 
 # ====================== Respuesta: calculo y persistencia ======================

@@ -362,7 +362,9 @@ def test_post_ingreso_con_rut_valido_crea_participante(client, facilitador, app)
     sesion_id = _crear_sesion_directa(app, eval_id, codigo="ING234")
 
     resp = client.post(
-        "/sesion/ING234/ingreso", data={"rut": RUT_VALIDO}, follow_redirects=False
+        "/sesion/ING234/ingreso",
+        data={"rut": RUT_VALIDO, "nombre": "Juan Perez"},
+        follow_redirects=False,
     )
     assert resp.status_code == 302
     assert resp.headers["Location"].endswith("/sesion/ING234/responder")
@@ -380,7 +382,10 @@ def test_post_ingreso_con_rut_invalido_no_crea_participante(client, facilitador,
     eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id)
     _crear_sesion_directa(app, eval_id, codigo="INV234")
 
-    resp = client.post("/sesion/INV234/ingreso", data={"rut": RUT_INVALIDO})
+    resp = client.post(
+        "/sesion/INV234/ingreso",
+        data={"rut": RUT_INVALIDO, "nombre": "Juan Perez"},
+    )
     assert resp.status_code == 200
     assert "inv\u00e1lido".encode("utf-8") in resp.data.lower() or b"invalido" in resp.data.lower()
 
@@ -392,10 +397,42 @@ def test_post_ingreso_con_rut_vacio_no_crea_participante(client, facilitador, ap
     eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id)
     _crear_sesion_directa(app, eval_id, codigo="VAC234")
 
-    resp = client.post("/sesion/VAC234/ingreso", data={"rut": ""})
+    resp = client.post(
+        "/sesion/VAC234/ingreso", data={"rut": "", "nombre": "Juan Perez"}
+    )
     assert resp.status_code == 200
     with app.app_context():
         assert db.session.query(Participante).count() == 0
+
+
+def test_post_ingreso_sin_nombre_no_crea_participante(client, facilitador, app):
+    """Nombre y apellido es obligatorio: si viene vacio, se rechaza el ingreso
+    y no se crea Participante (aunque el RUT sea valido)."""
+    eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id)
+    _crear_sesion_directa(app, eval_id, codigo="SNM234")
+
+    resp = client.post(
+        "/sesion/SNM234/ingreso", data={"rut": RUT_VALIDO, "nombre": ""}
+    )
+    assert resp.status_code == 200
+    assert b"nombre" in resp.data.lower()
+    with app.app_context():
+        assert db.session.query(Participante).count() == 0
+
+
+def test_post_ingreso_valido_guarda_nombre(client, facilitador, app):
+    """El nombre ingresado queda guardado en el Participante."""
+    eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id)
+    sesion_id = _crear_sesion_directa(app, eval_id, codigo="NOM234")
+
+    client.post(
+        "/sesion/NOM234/ingreso",
+        data={"rut": RUT_VALIDO, "nombre": "  Ana Soto  "},
+    )
+    with app.app_context():
+        p = db.session.query(Participante).filter_by(sesion_id=sesion_id).first()
+        assert p is not None
+        assert p.nombre == "Ana Soto"  # se guarda sin espacios sobrantes
 
 
 # ====================== Participante: reingreso ======================
@@ -407,16 +444,24 @@ def test_reingreso_mismo_rut_no_duplica_participante(client, facilitador, app):
     sesion_id = _crear_sesion_directa(app, eval_id, codigo="REI234")
 
     # Primer ingreso
-    client.post("/sesion/REI234/ingreso", data={"rut": RUT_VALIDO})
+    client.post(
+        "/sesion/REI234/ingreso",
+        data={"rut": RUT_VALIDO, "nombre": "Juan Perez"},
+    )
     # Borrar la cookie de sesion del cliente (simula nueva visita)
     with client.session_transaction() as sess:
         sess.clear()
-    # Segundo ingreso con el mismo RUT
-    client.post("/sesion/REI234/ingreso", data={"rut": RUT_VALIDO})
+    # Segundo ingreso con el mismo RUT (y nombre corregido)
+    client.post(
+        "/sesion/REI234/ingreso",
+        data={"rut": RUT_VALIDO, "nombre": "Juan Perez Soto"},
+    )
 
     with app.app_context():
         participantes = db.session.query(Participante).filter_by(sesion_id=sesion_id).all()
         assert len(participantes) == 1
+        # El reingreso actualiza el nombre en vez de duplicar al participante.
+        assert participantes[0].nombre == "Juan Perez Soto"
 
 
 # ====================== Defensas: sesion cerrada / codigo inexistente ======================
@@ -472,7 +517,10 @@ def test_responder_con_ingreso_valido_muestra_cuestionario(client, facilitador, 
     eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id)
     _crear_sesion_directa(app, eval_id, codigo="RPV234")
 
-    client.post("/sesion/RPV234/ingreso", data={"rut": RUT_VALIDO})
+    client.post(
+        "/sesion/RPV234/ingreso",
+        data={"rut": RUT_VALIDO, "nombre": "Juan Perez"},
+    )
     resp = client.get("/sesion/RPV234/responder")
     assert resp.status_code == 200
     # El form real renderiza el enunciado de la pregunta y radios por pregunta.
@@ -489,7 +537,10 @@ def test_cookie_cruzada_entre_sesiones_redirige_a_ingreso(client, facilitador, a
     _crear_sesion_directa(app, eval_id, codigo="SESB34")
 
     # Ingreso a sesion A
-    client.post("/sesion/SESA34/ingreso", data={"rut": RUT_VALIDO})
+    client.post(
+        "/sesion/SESA34/ingreso",
+        data={"rut": RUT_VALIDO, "nombre": "Juan Perez"},
+    )
 
     # Intento entrar a responder de sesion B con la cookie de A
     resp = client.get("/sesion/SESB34/responder", follow_redirects=False)
@@ -504,7 +555,10 @@ def test_responder_de_sesion_cerrada_muestra_aviso(client, facilitador, app):
     sesion_id = _crear_sesion_directa(app, eval_id, codigo="CRD234")
 
     # Ingreso mientras estaba abierta
-    client.post("/sesion/CRD234/ingreso", data={"rut": RUT_VALIDO})
+    client.post(
+        "/sesion/CRD234/ingreso",
+        data={"rut": RUT_VALIDO, "nombre": "Juan Perez"},
+    )
 
     # El facilitador cierra la sesion
     with app.app_context():
