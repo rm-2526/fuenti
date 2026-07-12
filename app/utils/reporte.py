@@ -126,40 +126,58 @@ def filas_csv_sesion(participantes) -> list[list[str]]:
     return filas
 
 
-# -------------------------- Desglose individual --------------------------
+# -------------------------- Foto congelada (snapshot) --------------------------
 
-def desglose_individual(preguntas, elegidas) -> list[LineaDesglose]:
-    """Arma el detalle pregunta-por-pregunta del informe individual.
+def foto_de_respuesta(pregunta, alternativa_elegida) -> dict:
+    """Congela (copia) los datos de una respuesta al momento de responder.
+
+    Devuelve un dict con los textos que se guardan en la Respuesta para que el
+    resultado no dependa despues de la evaluacion viva. El caller lo usa asi:
+    Respuesta(participante_id=..., pregunta_id=..., alternativa_id=..., **foto).
 
     Args:
-        preguntas: iterable de preguntas ordenadas. Cada una con .enunciado,
-            .orden y .alternativas (cada alternativa con .id, .texto,
-            .es_correcta).
-        elegidas: dict {pregunta.id: alternativa_id_elegida}. Si una pregunta
-            no esta en el dict, se marca como sin respuesta.
+        pregunta: la Pregunta respondida, con .enunciado, .orden y
+            .alternativas (cada una con .texto y .es_correcta).
+        alternativa_elegida: la Alternativa que marco el participante, con
+            .texto y .es_correcta.
 
-    Devuelve una linea por pregunta con el texto elegido, el correcto y si
-    acerto. No toca la BD.
+    Pura: no toca la BD, solo lee atributos de los objetos que recibe.
     """
+    correcta = next((a for a in pregunta.alternativas if a.es_correcta), None)
+    return {
+        "enunciado_texto": pregunta.enunciado,
+        "elegida_texto": alternativa_elegida.texto,
+        "correcta_texto": correcta.texto if correcta is not None else "",
+        "acerto": bool(alternativa_elegida.es_correcta),
+        "orden": pregunta.orden,
+    }
+
+
+# -------------------------- Desglose individual --------------------------
+
+def desglose_desde_respuestas(respuestas) -> list[LineaDesglose]:
+    """Arma el detalle pregunta-por-pregunta del informe individual leyendo la
+    FOTO congelada guardada en cada Respuesta (no la evaluacion viva).
+
+    Args:
+        respuestas: iterable de Respuesta. Cada una con la foto guardada:
+            .enunciado_texto, .elegida_texto, .correcta_texto, .acerto y .orden.
+
+    Ordena por el campo .orden guardado. Pura: no toca la BD. Como el resultado
+    quedo autocontenido, editar la evaluacion despues no altera este desglose.
+    """
+    def _orden(r):
+        return r.orden if r.orden is not None else 0
+
     lineas = []
-    for pregunta in preguntas:
-        correcta = next((a for a in pregunta.alternativas if a.es_correcta), None)
-        correcta_texto = correcta.texto if correcta is not None else ""
-
-        elegida_id = elegidas.get(pregunta.id)
-        elegida = next(
-            (a for a in pregunta.alternativas if a.id == elegida_id), None
-        )
-        elegida_texto = elegida.texto if elegida is not None else SIN_RESPUESTA
-        acerto = elegida is not None and elegida.es_correcta
-
+    for r in sorted(respuestas, key=_orden):
         lineas.append(
             LineaDesglose(
-                orden=pregunta.orden,
-                enunciado=pregunta.enunciado,
-                elegida=elegida_texto,
-                correcta=correcta_texto,
-                acerto=acerto,
+                orden=_orden(r),
+                enunciado=r.enunciado_texto or "",
+                elegida=r.elegida_texto or SIN_RESPUESTA,
+                correcta=r.correcta_texto or "",
+                acerto=bool(r.acerto),
             )
         )
     return lineas

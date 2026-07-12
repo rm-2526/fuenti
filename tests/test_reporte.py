@@ -11,7 +11,8 @@ from app.utils.reporte import (
     ENCABEZADOS_CSV,
     SIN_NOMBRE,
     SIN_RESPUESTA,
-    desglose_individual,
+    desglose_desde_respuestas,
+    foto_de_respuesta,
     filas_csv_sesion,
     filas_informe_sesion,
 )
@@ -94,7 +95,7 @@ def test_csv_pendiente_deja_columnas_vacias():
     assert fila[6] == ""   # aprobado
 
 
-# ----------------------- desglose_individual -----------------------
+# ----------------------- foto_de_respuesta (snapshot) -----------------------
 
 def _pregunta(id, orden, enunciado, alternativas):
     return SimpleNamespace(
@@ -106,29 +107,61 @@ def _alt(id, texto, es_correcta):
     return SimpleNamespace(id=id, texto=texto, es_correcta=es_correcta)
 
 
-def test_desglose_marca_acierto_y_error():
+def test_foto_congela_los_textos_al_elegir_incorrecta():
     a_ok = _alt(1, "4", True)
     a_mal = _alt(2, "5", False)
     p = _pregunta(100, 1, "¿2+2?", [a_ok, a_mal])
 
-    # Eligio la incorrecta
-    linea = desglose_individual([p], {100: 2})[0]
-    assert linea.orden == 1
-    assert linea.enunciado == "¿2+2?"
-    assert linea.elegida == "5"
-    assert linea.correcta == "4"
-    assert linea.acerto is False
-
-    # Eligio la correcta
-    linea = desglose_individual([p], {100: 1})[0]
-    assert linea.acerto is True
+    foto = foto_de_respuesta(p, a_mal)   # eligio la incorrecta
+    assert foto["enunciado_texto"] == "¿2+2?"
+    assert foto["elegida_texto"] == "5"
+    assert foto["correcta_texto"] == "4"
+    assert foto["acerto"] is False
+    assert foto["orden"] == 1
 
 
-def test_desglose_pregunta_sin_respuesta():
+def test_foto_marca_acierto_al_elegir_correcta():
     a_ok = _alt(1, "4", True)
-    p = _pregunta(100, 1, "¿2+2?", [a_ok])
+    a_mal = _alt(2, "5", False)
+    p = _pregunta(100, 1, "¿2+2?", [a_ok, a_mal])
 
-    linea = desglose_individual([p], {})[0]   # no la respondio
-    assert linea.elegida == SIN_RESPUESTA
-    assert linea.acerto is False
-    assert linea.correcta == "4"
+    foto = foto_de_respuesta(p, a_ok)    # eligio la correcta
+    assert foto["acerto"] is True
+    assert foto["elegida_texto"] == "4"
+    assert foto["correcta_texto"] == "4"
+
+
+# -------------------- desglose_desde_respuestas (lee la foto) --------------------
+
+def _resp(orden, enunciado, elegida, correcta, acerto):
+    """Respuesta liviana con solo la foto congelada (lo que lee el desglose)."""
+    return SimpleNamespace(
+        orden=orden,
+        enunciado_texto=enunciado,
+        elegida_texto=elegida,
+        correcta_texto=correcta,
+        acerto=acerto,
+    )
+
+
+def test_desglose_desde_respuestas_ordena_y_marca():
+    # Llegan desordenadas: deben salir por orden ascendente.
+    respuestas = [
+        _resp(2, "¿Capital de Chile?", "Santiago", "Santiago", True),
+        _resp(1, "¿2+2?", "5", "4", False),
+    ]
+    lineas = desglose_desde_respuestas(respuestas)
+
+    assert [l.orden for l in lineas] == [1, 2]
+    assert lineas[0].enunciado == "¿2+2?"
+    assert lineas[0].elegida == "5"
+    assert lineas[0].correcta == "4"
+    assert lineas[0].acerto is False
+    assert lineas[1].acerto is True
+
+
+def test_desglose_desde_respuestas_sin_texto_elegida_muestra_sin_respuesta():
+    # Defensa: si por lo que sea no hay texto elegido, se marca sin respuesta.
+    lineas = desglose_desde_respuestas([_resp(1, "¿2+2?", None, "4", False)])
+    assert lineas[0].elegida == SIN_RESPUESTA
+    assert lineas[0].acerto is False

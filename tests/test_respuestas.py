@@ -107,6 +107,48 @@ def test_respuesta_correcta_calcula_y_persiste(client, facilitador, app):
         assert participante.finalizado_at is not None
 
 
+def test_finalizar_guarda_la_foto_congelada(client, facilitador, app):
+    """Al finalizar, cada Respuesta guarda su copia (enunciado, elegida,
+    correcta, acerto, orden) y el Resultado guarda titulo y umbral aplicados.
+    Asi el resultado queda autocontenido y no depende de la evaluacion viva.
+    """
+    eval_id, info = _crear_eval(app, facilitador.id, n_preguntas=2, umbral=60)
+    sesion_id = _abrir_sesion(app, eval_id, codigo="FOTO34")
+    _ingresar(client, "FOTO34")
+
+    # Pregunta 1 correcta, pregunta 2 incorrecta.
+    (pid1, correcta1, _), (pid2, _, incorrecta2) = info
+    data = {f"pregunta_{pid1}": correcta1, f"pregunta_{pid2}": incorrecta2}
+    client.post("/sesion/FOTO34/responder", data=data)
+
+    with app.app_context():
+        participante = db.session.query(Participante).filter_by(sesion_id=sesion_id).one()
+        respuestas = {
+            r.orden: r
+            for r in db.session.query(Respuesta).filter_by(
+                participante_id=participante.id
+            )
+        }
+
+        # Pregunta 1 (orden 1): eligio la correcta.
+        r1 = respuestas[1]
+        assert r1.enunciado_texto == "Pregunta 1"
+        assert r1.elegida_texto == "correcta"
+        assert r1.correcta_texto == "correcta"
+        assert r1.acerto is True
+
+        # Pregunta 2 (orden 2): eligio la incorrecta.
+        r2 = respuestas[2]
+        assert r2.enunciado_texto == "Pregunta 2"
+        assert r2.elegida_texto == "incorrecta"
+        assert r2.correcta_texto == "correcta"
+        assert r2.acerto is False
+
+        # El resultado guarda el encabezado congelado.
+        assert participante.resultado.evaluacion_titulo == "Eval respuestas"
+        assert participante.resultado.umbral_aprobacion == 60
+
+
 def test_respuesta_incorrecta_reprueba(client, facilitador, app):
     eval_id, info = _crear_eval(app, facilitador.id, n_preguntas=2, umbral=60)
     sesion_id = _abrir_sesion(app, eval_id, codigo="BADD34")

@@ -20,6 +20,7 @@ from app import db
 from app.models import Participante, Respuesta, Resultado, Sesion, ahora_utc
 from app.participante import bp
 from app.utils.calificacion import calcular_calificacion
+from app.utils.reporte import foto_de_respuesta
 from app.utils.rut import hash_rut, validar_rut
 
 
@@ -231,11 +232,15 @@ def _procesar_respuestas(sesion: Sesion, participante: Participante, preguntas: 
         if alternativa.es_correcta:
             puntaje += 1
 
+        # Congelamos la copia del contenido en la propia respuesta: asi el
+        # resultado queda autocontenido y no depende de la evaluacion viva.
+        foto = foto_de_respuesta(p, alternativa)
         respuestas_a_crear.append(
             Respuesta(
                 participante_id=participante.id,
                 pregunta_id=p.id,
                 alternativa_id=alternativa.id,
+                **foto,
             )
         )
 
@@ -255,6 +260,9 @@ def _procesar_respuestas(sesion: Sesion, participante: Participante, preguntas: 
             porcentaje=calificacion.porcentaje,
             nota=calificacion.nota,
             aprobado=calificacion.aprobado,
+            # Foto congelada del encabezado: titulo y umbral aplicados.
+            evaluacion_titulo=sesion.evaluacion.titulo,
+            umbral_aprobacion=sesion.evaluacion.umbral_aprobacion,
         )
     )
     participante.finalizado_at = ahora_utc()

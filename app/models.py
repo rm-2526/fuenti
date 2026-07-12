@@ -129,6 +129,19 @@ class Respuesta(db.Model):
     alternativa_id: Mapped[int] = mapped_column(ForeignKey("alternativa.id"), nullable=False)
     enviada_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=ahora_utc)
 
+    # --- Foto congelada (snapshot) ---
+    # Copia del contenido tal como estaba al momento de responder. Deja la
+    # respuesta autocontenida: el informe individual se arma con estos textos,
+    # no leyendo la evaluacion viva. Asi se puede editar la evaluacion despues
+    # sin alterar los resultados de sesiones ya rendidas.
+    # Nullable por compatibilidad (columnas agregadas a una tabla existente);
+    # el flujo de finalizacion siempre las rellena.
+    enunciado_texto: Mapped[str | None] = mapped_column(Text, nullable=True)
+    elegida_texto: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    correcta_texto: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    acerto: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    orden: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     participante: Mapped["Participante"] = relationship(back_populates="respuestas")
     pregunta: Mapped["Pregunta"] = relationship(back_populates="respuestas")
     alternativa: Mapped["Alternativa"] = relationship(back_populates="respuestas")
@@ -151,5 +164,13 @@ class Resultado(db.Model):
     nota: Mapped[float] = mapped_column(Float, nullable=False)  # escala 1.0-7.0
     aprobado: Mapped[bool] = mapped_column(Boolean, nullable=False)
     calculado_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=ahora_utc)
+
+    # --- Foto congelada (snapshot) del encabezado ---
+    # Titulo de la evaluacion y umbral aplicados al momento de calcular. Dejan
+    # el informe autocontenido tambien en su encabezado: si despues se edita el
+    # titulo o el umbral de la evaluacion, el resultado viejo sigue mostrando
+    # lo que efectivamente se aplico. Nullable por compatibilidad.
+    evaluacion_titulo: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    umbral_aprobacion: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     participante: Mapped["Participante"] = relationship(back_populates="resultado")

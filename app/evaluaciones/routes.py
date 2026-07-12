@@ -23,7 +23,7 @@ from app.utils.sesion import generar_codigo_sesion
 from app.utils.estadisticas import resumir_resultados
 from app.utils.reporte import (
     ENCABEZADOS_CSV,
-    desglose_individual,
+    desglose_desde_respuestas,
     filas_csv_sesion,
     filas_informe_sesion,
 )
@@ -159,10 +159,10 @@ def informe_individual(eval_id, sesion_id, participante_id):
     sesion = _get_sesion_de_evaluacion(evaluacion, sesion_id)
     participante = _get_participante_de_sesion(sesion, participante_id)
 
-    # Preguntas ordenadas y la alternativa que eligio en cada una.
-    preguntas = sorted(evaluacion.preguntas, key=lambda p: p.orden)
-    elegidas = {r.pregunta_id: r.alternativa_id for r in participante.respuestas}
-    desglose = desglose_individual(preguntas, elegidas)
+    # El desglose se arma desde la FOTO congelada guardada en cada respuesta,
+    # no desde la evaluacion viva: asi editar la evaluacion despues no altera
+    # el informe de una sesion ya rendida.
+    desglose = desglose_desde_respuestas(participante.respuestas)
 
     return render_template(
         "evaluaciones/informe_individual.html",

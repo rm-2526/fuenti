@@ -647,6 +647,57 @@ def test_informe_individual_muestra_desglose(client, facilitador, app):
     assert b"Detalle de respuestas" in resp.data
 
 
+def test_editar_evaluacion_no_altera_informe_ya_rendido(client, facilitador, app):
+    """Independencia (foto congelada): despues de que un participante rindio,
+    editar la evaluacion (enunciado, textos de alternativas, incluso cual es la
+    correcta) NO cambia su informe individual. El informe muestra lo que habia
+    al momento de responder.
+    """
+    eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id, titulo="Suma")
+    sesion_id = _crear_sesion_directa(app, eval_id, codigo="EDT234")
+    pid, alts = _pregunta_y_alternativas(app, eval_id)
+
+    # El participante responde MAL (elige "5" cuando la correcta es "4").
+    client.post(
+        "/sesion/EDT234/ingreso", data={"rut": RUT_VALIDO, "nombre": "Ana Soto"}
+    )
+    client.post("/sesion/EDT234/responder", data={f"pregunta_{pid}": alts["5"]})
+
+    with app.app_context():
+        part_id = (
+            db.session.query(Participante).filter_by(sesion_id=sesion_id).first().id
+        )
+
+        # Ahora EDITAMOS la evaluacion viva: cambiamos el enunciado, los textos
+        # de las alternativas y hasta cual es la correcta. Usamos tokens bien
+        # distintivos para que las comparaciones no choquen con nada de la pagina.
+        p = db.session.query(Pregunta).filter_by(evaluacion_id=eval_id).first()
+        p.enunciado = "ENUNCIADO_EDITADO_XYZ"
+        for a in p.alternativas:
+            if a.texto == "4":
+                a.texto = "ALT_EDITADA_A"
+                a.es_correcta = False   # ya no es la correcta
+            elif a.texto == "5":
+                a.texto = "ALT_EDITADA_B"
+                a.es_correcta = True    # ahora esta seria la correcta
+        db.session.commit()
+
+    _login(client)
+    resp = client.get(
+        f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/participantes/{part_id}/informe"
+    )
+    assert resp.status_code == 200
+
+    # El informe sigue mostrando el contenido ORIGINAL (la foto congelada)...
+    assert "¿2+2?".encode("utf-8") in resp.data
+    # ...y NADA de lo editado despues.
+    assert b"ENUNCIADO_EDITADO_XYZ" not in resp.data
+    assert b"ALT_EDITADA_A" not in resp.data
+    assert b"ALT_EDITADA_B" not in resp.data
+    # Y sigue marcada como incorrecta (eligio "5", que entonces era incorrecta).
+    assert b"Incorrecta" in resp.data
+
+
 def test_informe_participante_sin_finalizar_muestra_aviso(client, facilitador, app):
     eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id)
     sesion_id = _crear_sesion_directa(app, eval_id, codigo="INF235")
