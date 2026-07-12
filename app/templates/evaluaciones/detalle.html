@@ -75,7 +75,7 @@
   <div class="alert alert-info mb-4">
     Esta evaluación todavía no tiene sesiones.
     {% if evaluacion.preguntas %}
-      Abrí una para empezar a recibir participantes.
+      Presiona + Abrir sesión para empezar a recibir participantes.
     {% else %}
       Primero agrega preguntas, después podrás abrir una sesión.
     {% endif %}
@@ -108,9 +108,14 @@
 
 <hr>
 
-<form method="POST"
-      action="{{ url_for('evaluaciones.eliminar', eval_id=evaluacion.id) }}"
-      onsubmit="return confirm('¿Eliminar esta evaluación? Esta acción no se puede deshacer. Si tiene sesiones, también se borrarán todas las respuestas asociadas.');">
-  <button type="submit" class="btn btn-outline-danger">Eliminar evaluación</button>
-</form>
+<div class="d-flex gap-2 align-items-center">
+  <a href="{{ url_for('evaluaciones.editar', eval_id=evaluacion.id) }}"
+     class="btn btn-outline-primary">Editar evaluación</a>
+
+  <form method="POST"
+        action="{{ url_for('evaluaciones.eliminar', eval_id=evaluacion.id) }}"
+        onsubmit="return confirm('¿Eliminar esta evaluación? Esta acción no se puede deshacer. Si tiene sesiones, también se borrarán todas las respuestas asociadas.');">
+    <button type="submit" class="btn btn-outline-danger">Eliminar evaluación</button>
+  </form>
+</div>
 {% endblock %}

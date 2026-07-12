@@ -75,6 +75,36 @@ def detalle(eval_id):
     )
 
 
+@bp.route("/<int:eval_id>/editar", methods=["GET", "POST"])
+@login_required
+def editar(eval_id):
+    evaluacion = _get_evaluacion_propia(eval_id)
+
+    # No se puede editar mientras haya una sesion abierta: cambiar las preguntas
+    # en vivo ensuciaria esa sesion (unos responderian una version y otros otra).
+    # El facilitador debe cerrar la sesion primero.
+    if _tiene_sesion_abierta(evaluacion):
+        flash(
+            "No se puede editar mientras haya una sesión abierta. "
+            "Ciérrala primero y vuelve a intentar.",
+            "danger",
+        )
+        return redirect(url_for("evaluaciones.detalle", eval_id=eval_id))
+
+    if request.method == "POST":
+        return _actualizar_evaluacion(evaluacion)
+
+    return render_template(
+        "evaluaciones/nueva.html",
+        titulo=evaluacion.titulo,
+        umbral=str(evaluacion.umbral_aprobacion),
+        preguntas_form=_preguntas_form_desde_evaluacion(evaluacion),
+        titulo_pagina="Editar evaluación",
+        boton_guardar="Guardar cambios",
+        cancelar_url=url_for("evaluaciones.detalle", eval_id=eval_id),
+    )
+
+
 @bp.route("/<int:eval_id>/eliminar", methods=["POST"])
 @login_required
 def eliminar(eval_id):
@@ -325,9 +355,23 @@ def _crear_evaluacion():
     db.session.add(evaluacion)
     db.session.flush()  # obtenemos evaluacion.id sin commitear todavía
 
+    _insertar_preguntas(evaluacion.id, preguntas)
+
+    db.session.commit()
+    flash(f'Evaluación "{titulo}" creada.', "success")
+    return redirect(url_for("evaluaciones.listado"))
+
+
+def _insertar_preguntas(evaluacion_id, preguntas):
+    """Crea las Pregunta/Alternativa de una evaluacion a partir de la lista ya
+    parseada y validada. Compartido por crear y editar.
+
+    `preguntas` es la salida de _parsear_preguntas: lista de dicts con
+    {enunciado, correcta, alternativas: [(j, texto)]}.
+    """
     for orden_p, p in enumerate(preguntas, start=1):
         pregunta = Pregunta(
-            evaluacion_id=evaluacion.id,
+            evaluacion_id=evaluacion_id,
             enunciado=p["enunciado"],
             orden=orden_p,
         )
@@ -344,9 +388,78 @@ def _crear_evaluacion():
             )
             db.session.add(alternativa)
 
+
+def _tiene_sesion_abierta(evaluacion) -> bool:
+    """True si la evaluacion tiene al menos una sesion en estado 'abierta'."""
+    return any(s.estado == "abierta" for s in evaluacion.sesiones)
+
+
+def _preguntas_form_desde_evaluacion(evaluacion):
+    """Arma la estructura que espera el formulario (la misma forma que produce
+    _parsear_preguntas) a partir de las preguntas guardadas, para pre-cargar la
+    edicion: lista de {enunciado, correcta, alternativas: [(j, texto)]}.
+
+    Los indices j van 0,1,2... (igual que al crear), para que el JS que agrega
+    alternativas calcule bien el siguiente indice y no choque.
+    """
+    form = []
+    for p in sorted(evaluacion.preguntas, key=lambda p: p.orden):
+        alts = sorted(p.alternativas, key=lambda a: a.orden)
+        correcta_pos = next(
+            (i for i, a in enumerate(alts) if a.es_correcta), None
+        )
+        form.append(
+            {
+                "enunciado": p.enunciado,
+                "correcta": str(correcta_pos) if correcta_pos is not None else "",
+                "alternativas": [(i, a.texto) for i, a in enumerate(alts)],
+            }
+        )
+    return form
+
+
+def _actualizar_evaluacion(evaluacion):
+    """Procesa el POST de /evaluaciones/<id>/editar.
+
+    Reusa el parseo y la validacion de la creacion. Si es valido, actualiza
+    titulo/umbral y REEMPLAZA el set de preguntas (borra las viejas y re-crea
+    desde el formulario). Es seguro porque los resultados ya tienen su foto
+    congelada: al borrar una pregunta ya respondida, sus respuestas sueltan el
+    enlace (pregunta_id/alternativa_id -> NULL) pero conservan la copia.
+    """
+    titulo = request.form.get("titulo", "").strip()
+    umbral_str = request.form.get("umbral", "").strip()
+    preguntas = _parsear_preguntas(request.form)
+    errores = _validar(titulo, umbral_str, preguntas)
+
+    if errores:
+        for e in errores:
+            flash(e, "danger")
+        return render_template(
+            "evaluaciones/nueva.html",
+            titulo=titulo,
+            umbral=umbral_str,
+            preguntas_form=preguntas,
+            titulo_pagina="Editar evaluación",
+            boton_guardar="Guardar cambios",
+            cancelar_url=url_for("evaluaciones.detalle", eval_id=evaluacion.id),
+        )
+
+    evaluacion.titulo = titulo
+    evaluacion.umbral_aprobacion = int(umbral_str)
+
+    # Reemplazo del set de preguntas. Al borrar cada pregunta, sus alternativas
+    # se borran en cascada y las respuestas asociadas sueltan el enlace (quedan
+    # en NULL) conservando su foto congelada.
+    for pregunta in list(evaluacion.preguntas):
+        db.session.delete(pregunta)
+    db.session.flush()
+
+    _insertar_preguntas(evaluacion.id, preguntas)
+
     db.session.commit()
-    flash(f'Evaluación "{titulo}" creada.', "success")
-    return redirect(url_for("evaluaciones.listado"))
+    flash(f'Evaluación "{titulo}" actualizada.', "success")
+    return redirect(url_for("evaluaciones.detalle", eval_id=evaluacion.id))
 
 
 def _parsear_preguntas(form):

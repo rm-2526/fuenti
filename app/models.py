@@ -125,8 +125,12 @@ class Respuesta(db.Model):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     participante_id: Mapped[int] = mapped_column(ForeignKey("participante.id"), nullable=False)
-    pregunta_id: Mapped[int] = mapped_column(ForeignKey("pregunta.id"), nullable=False)
-    alternativa_id: Mapped[int] = mapped_column(ForeignKey("alternativa.id"), nullable=False)
+    # pregunta_id / alternativa_id son opcionales (nullable): si la evaluacion se
+    # edita y una pregunta o alternativa se borra, la respuesta suelta el enlace
+    # (queda en NULL) pero CONSERVA su foto congelada. Asi editar una evaluacion
+    # ya rendida no rompe el historial.
+    pregunta_id: Mapped[int | None] = mapped_column(ForeignKey("pregunta.id"), nullable=True)
+    alternativa_id: Mapped[int | None] = mapped_column(ForeignKey("alternativa.id"), nullable=True)
     enviada_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=ahora_utc)
 
     # --- Foto congelada (snapshot) ---

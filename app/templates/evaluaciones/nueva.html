@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h1 class="h3 mb-4">Nueva evaluación</h1>
+<h1 class="h3 mb-4">{{ titulo_pagina | default("Nueva evaluación") }}</h1>
 
 <form method="POST" id="form-nueva-evaluacion">
   <div class="mb-3">
@@ -68,8 +68,8 @@
   </button>
 
   <div class="d-flex gap-2">
-    <button type="submit" class="btn btn-primary">Guardar evaluación</button>
-    <a href="{{ url_for('evaluaciones.listado') }}" class="btn btn-link">Cancelar</a>
+    <button type="submit" class="btn btn-primary">{{ boton_guardar | default("Guardar evaluación") }}</button>
+    <a href="{{ cancelar_url | default(url_for('evaluaciones.listado')) }}" class="btn btn-link">Cancelar</a>
   </div>
 </form>
 
