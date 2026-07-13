@@ -53,9 +53,8 @@ def test_dashboard_muestra_menu_principal(client, facilitador):
     _login(client)
     resp = client.get("/dashboard")
     assert resp.status_code == 200
-    # Las tres opciones del menu principal.
+    # Las tres opciones del menu principal, ya activas.
     assert b"Iniciar evaluaci" in resp.data
     assert b"Biblioteca" in resp.data
     assert b"Informes" in resp.data
-    # Iniciar e Informes aun no estan activas.
-    assert "Próximamente".encode("utf-8") in resp.data
+    assert "Próximamente".encode("utf-8") not in resp.data

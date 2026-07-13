@@ -64,6 +64,31 @@ def iniciar():
     return render_template("evaluaciones/iniciar.html", evaluaciones=evaluaciones)
 
 
+@bp.route("/informes")
+@login_required
+def informes():
+    """Informes: sesiones CERRADAS del facilitador, agrupadas por evaluacion.
+    Cada sesion enlaza a su pantalla de resultados (detalle_sesion). Las
+    sesiones abiertas no aparecen aca (se gestionan desde Iniciar).
+    """
+    evaluaciones = (
+        db.session.query(Evaluacion)
+        .filter_by(facilitador_id=current_user.id)
+        .order_by(Evaluacion.created_at.desc())
+        .all()
+    )
+    grupos = []
+    for e in evaluaciones:
+        cerradas = sorted(
+            (s for s in e.sesiones if s.estado == "cerrada"),
+            key=lambda s: s.cerrada_at or s.abierta_at,
+            reverse=True,
+        )
+        if cerradas:
+            grupos.append((e, cerradas))
+    return render_template("evaluaciones/informes.html", grupos=grupos)
+
+
 @bp.route("/nueva", methods=["GET", "POST"])
 @login_required
 def nueva():
@@ -81,13 +106,9 @@ def nueva():
 @login_required
 def detalle(eval_id):
     evaluacion = _get_evaluacion_propia(eval_id)
-    sesiones = sorted(
-        evaluacion.sesiones, key=lambda s: s.abierta_at, reverse=True
-    )
     return render_template(
         "evaluaciones/detalle.html",
         evaluacion=evaluacion,
-        sesiones=sesiones,
     )
 
 

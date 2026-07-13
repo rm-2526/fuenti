@@ -837,3 +837,87 @@ def test_export_csv_requiere_login(client, facilitador, app):
 
     resp = client.get(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/export.csv")
     assert resp.status_code != 200
+
+
+# ==================== Informes (sesiones cerradas) ====================
+
+def test_informes_sin_auth_redirige_a_login(client):
+    resp = client.get("/evaluaciones/informes", follow_redirects=False)
+    assert resp.status_code == 302
+    assert "/login" in resp.headers["Location"]
+
+
+def test_informes_muestra_solo_cerradas(client, facilitador, app):
+    eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id, titulo="Historia")
+    _crear_sesion_directa(app, eval_id, codigo="CERRAD", estado="cerrada")
+    _crear_sesion_directa(app, eval_id, codigo="ABIERT", estado="abierta")
+
+    _login(client)
+    resp = client.get("/evaluaciones/informes")
+    assert resp.status_code == 200
+    assert b"CERRAD" in resp.data       # la cerrada aparece
+    assert b"ABIERT" not in resp.data   # la abierta no
+
+
+def test_informes_agrupa_por_evaluacion(client, facilitador, app):
+    e1 = _crear_evaluacion_con_pregunta(app, facilitador.id, titulo="Matematica")
+    e2 = _crear_evaluacion_con_pregunta(app, facilitador.id, titulo="Lenguaje")
+    _crear_sesion_directa(app, e1, codigo="MATCOD", estado="cerrada")
+    _crear_sesion_directa(app, e2, codigo="LENCOD", estado="cerrada")
+
+    _login(client)
+    resp = client.get("/evaluaciones/informes")
+    assert "Matematica".encode("utf-8") in resp.data
+    assert "Lenguaje".encode("utf-8") in resp.data
+    assert b"MATCOD" in resp.data
+    assert b"LENCOD" in resp.data
+
+
+def test_informes_solo_muestra_propias(client, facilitador, app):
+    with app.app_context():
+        otro = Facilitador(email="otro3@fuenti.cl", nombre="Otro3")
+        otro.set_password("clave123")
+        db.session.add(otro)
+        db.session.commit()
+        otro_id = otro.id
+    eval_ajena = _crear_evaluacion_con_pregunta(app, otro_id, titulo="Ajena informe")
+    _crear_sesion_directa(app, eval_ajena, codigo="AJENAC", estado="cerrada")
+
+    eval_propia = _crear_evaluacion_con_pregunta(
+        app, facilitador.id, titulo="Propia informe"
+    )
+    _crear_sesion_directa(app, eval_propia, codigo="PROPIA", estado="cerrada")
+
+    _login(client)
+    resp = client.get("/evaluaciones/informes")
+    assert b"PROPIA" in resp.data
+    assert b"AJENAC" not in resp.data
+    assert "Ajena informe".encode("utf-8") not in resp.data
+
+
+def test_informes_enlaza_a_resultados_de_la_sesion(client, facilitador, app):
+    eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id, titulo="Con enlace")
+    sesion_id = _crear_sesion_directa(app, eval_id, codigo="ENLACE", estado="cerrada")
+
+    _login(client)
+    resp = client.get("/evaluaciones/informes")
+    assert f"/evaluaciones/{eval_id}/sesiones/{sesion_id}".encode("utf-8") in resp.data
+
+
+def test_informes_vacio_muestra_aviso(client, facilitador, app):
+    _crear_evaluacion_con_pregunta(app, facilitador.id, titulo="Sin cerradas")
+    _login(client)
+    resp = client.get("/evaluaciones/informes")
+    assert resp.status_code == 200
+    assert "no hay sesiones cerradas".encode("utf-8") in resp.data
+
+
+def test_iniciar_muestra_enlace_gestionar_si_sesion_abierta(client, facilitador, app):
+    eval_id = _crear_evaluacion_con_pregunta(app, facilitador.id, titulo="Con abierta")
+    sesion_id = _crear_sesion_directa(app, eval_id, codigo="GESCOD", estado="abierta")
+
+    _login(client)
+    resp = client.get("/evaluaciones/iniciar")
+    assert resp.status_code == 200
+    assert "gestionar".encode("utf-8") in resp.data
+    assert f"/evaluaciones/{eval_id}/sesiones/{sesion_id}".encode("utf-8") in resp.data

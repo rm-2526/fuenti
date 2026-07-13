@@ -22,6 +22,11 @@
           <td>{{ e.titulo }}</td>
           <td>{{ e.preguntas | length }}</td>
           <td class="text-end">
+            {% set abierta = (e.sesiones | selectattr('estado', 'equalto', 'abierta') | first) %}
+            {% if abierta %}
+              <a href="{{ url_for('evaluaciones.detalle_sesion', eval_id=e.id, sesion_id=abierta.id) }}"
+                 class="btn btn-sm btn-outline-success me-1">Sesión abierta → gestionar</a>
+            {% endif %}
             {% if e.preguntas %}
               <form method="POST"
                     action="{{ url_for('evaluaciones.abrir_sesion', eval_id=e.id) }}"

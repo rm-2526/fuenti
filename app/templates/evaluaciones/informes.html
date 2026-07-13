@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Informes — Fuenti{% endblock %}
+{% block content %}
+<h1 class="h3 mb-1">Informes</h1>
+<p class="text-muted mb-4">
+  Resultados de las sesiones ya cerradas, agrupados por evaluación.
+</p>
+
+{% if grupos %}
+  {% for evaluacion, sesiones in grupos %}
+    <h2 class="h5 mb-2">{{ evaluacion.titulo }}</h2>
+    <div class="table-responsive mb-4">
+      <table class="table table-hover align-middle">
+        <thead>
+          <tr>
+            <th>Código</th>
+            <th>Cerrada</th>
+            <th class="text-end">Resultados</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in sesiones %}
+          <tr>
+            <td class="font-monospace">{{ s.codigo }}</td>
+            <td>
+              {% if s.cerrada_at %}{{ s.cerrada_at | hora_local }}{% else %}—{% endif %}
+            </td>
+            <td class="text-end">
+              <a href="{{ url_for('evaluaciones.detalle_sesion', eval_id=evaluacion.id, sesion_id=s.id) }}"
+                 class="btn btn-sm btn-outline-primary">Ver resultados</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endfor %}
+{% else %}
+  <div class="alert alert-info">
+    Todavía no hay sesiones cerradas. Cuando cierres una sesión, sus resultados aparecerán aquí.
+  </div>
+{% endif %}
+{% endblock %}
