@@ -48,6 +48,22 @@ def listado():
     return render_template("evaluaciones/listado.html", evaluaciones=evaluaciones)
 
 
+@bp.route("/iniciar")
+@login_required
+def iniciar():
+    """Pagina de lanzamiento: lista las evaluaciones del facilitador para abrir
+    una sesion. Reusa la ruta abrir_sesion; las evaluaciones sin preguntas
+    aparecen con el boton deshabilitado.
+    """
+    evaluaciones = (
+        db.session.query(Evaluacion)
+        .filter_by(facilitador_id=current_user.id)
+        .order_by(Evaluacion.created_at.desc())
+        .all()
+    )
+    return render_template("evaluaciones/iniciar.html", evaluaciones=evaluaciones)
+
+
 @bp.route("/nueva", methods=["GET", "POST"])
 @login_required
 def nueva():

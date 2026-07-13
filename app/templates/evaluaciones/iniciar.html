@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Iniciar evaluación — Fuenti{% endblock %}
+{% block content %}
+<h1 class="h3 mb-1">Iniciar evaluación</h1>
+<p class="text-muted mb-4">
+  Elige una evaluación y abre una sesión para recibir participantes.
+</p>
+
+{% if evaluaciones %}
+  <div class="table-responsive">
+    <table class="table table-hover align-middle">
+      <thead>
+        <tr>
+          <th>Título</th>
+          <th>Preguntas</th>
+          <th class="text-end">Acción</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in evaluaciones %}
+        <tr>
+          <td>{{ e.titulo }}</td>
+          <td>{{ e.preguntas | length }}</td>
+          <td class="text-end">
+            {% if e.preguntas %}
+              <form method="POST"
+                    action="{{ url_for('evaluaciones.abrir_sesion', eval_id=e.id) }}"
+                    class="d-inline">
+                <button type="submit" class="btn btn-sm btn-primary">Abrir sesión</button>
+              </form>
+            {% else %}
+              <button class="btn btn-sm btn-primary" disabled
+                      title="Agrega preguntas primero">Abrir sesión</button>
+              <div class="small text-muted">Agrega preguntas primero</div>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <div class="alert alert-info">
+    No tienes evaluaciones todavía.
+    <a href="{{ url_for('evaluaciones.nueva') }}" class="alert-link">Crea la primera</a>.
+  </div>
+{% endif %}
+{% endblock %}

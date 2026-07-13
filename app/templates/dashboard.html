@@ -5,15 +5,18 @@
 <p class="text-muted mb-4">¿Qué quieres hacer?</p>
 
 <div class="row g-3">
-  <!-- Iniciar evaluación (se activa en un próximo bloque) -->
+  <!-- Iniciar evaluación (activa) -->
   <div class="col-12 col-md-4">
-    <div class="card h-100">
-      <div class="card-body d-flex flex-column text-muted">
+    <div class="card h-100 border-primary">
+      <div class="card-body d-flex flex-column">
         <h2 class="h5">Iniciar evaluación</h2>
         <p class="small flex-grow-1">
           Elige una evaluación y ábrela para recibir participantes.
         </p>
-        <span class="badge bg-secondary align-self-start">Próximamente</span>
+        <a href="{{ url_for('evaluaciones.iniciar') }}"
+           class="btn btn-primary align-self-start">
+          Iniciar una evaluación
+        </a>
       </div>
     </div>
   </div>

@@ -440,3 +440,71 @@ def test_editar_evaluacion_ya_respondida_suelta_enlace_y_conserva_foto(
         assert r.enunciado_texto == "¿2+2?"
         assert r.elegida_texto == "5"
         assert r.correcta_texto == "4"
+
+
+# ==================== Iniciar evaluación (lanzamiento) ====================
+
+def _crear_eval_vacia(app, facilitador_id, titulo="Vacia"):
+    """Crea una evaluacion SIN preguntas. Devuelve el id."""
+    with app.app_context():
+        e = Evaluacion(
+            facilitador_id=facilitador_id, titulo=titulo, umbral_aprobacion=60
+        )
+        db.session.add(e)
+        db.session.commit()
+        return e.id
+
+
+def test_iniciar_sin_auth_redirige_a_login(client):
+    resp = client.get("/evaluaciones/iniciar", follow_redirects=False)
+    assert resp.status_code == 302
+    assert "/login" in resp.headers["Location"]
+
+
+def test_iniciar_con_preguntas_muestra_boton_activo(client, facilitador, app):
+    _crear_eval_directa(app, facilitador.id, titulo="Lista para lanzar")
+    _login(client)
+    resp = client.get("/evaluaciones/iniciar")
+    assert resp.status_code == 200
+    assert "Lista para lanzar".encode("utf-8") in resp.data
+    assert "Abrir sesión".encode("utf-8") in resp.data
+    assert b"disabled" not in resp.data
+
+
+def test_iniciar_sin_preguntas_boton_deshabilitado(client, facilitador, app):
+    _crear_eval_vacia(app, facilitador.id, titulo="Sin preguntas")
+    _login(client)
+    resp = client.get("/evaluaciones/iniciar")
+    assert resp.status_code == 200
+    assert "Sin preguntas".encode("utf-8") in resp.data
+    assert b"disabled" in resp.data
+    assert "Agrega preguntas primero".encode("utf-8") in resp.data
+
+
+def test_iniciar_solo_muestra_propias(client, facilitador, app):
+    with app.app_context():
+        otro = Facilitador(email="otro2@fuenti.cl", nombre="Otro2")
+        otro.set_password("clave123")
+        db.session.add(otro)
+        db.session.commit()
+        otro_id = otro.id
+    _crear_eval_directa(app, otro_id, titulo="De otro")
+    _crear_eval_directa(app, facilitador.id, titulo="Mia propia")
+
+    _login(client)
+    resp = client.get("/evaluaciones/iniciar")
+    assert "Mia propia".encode("utf-8") in resp.data
+    assert "De otro".encode("utf-8") not in resp.data
+
+
+def test_abrir_sesion_desde_iniciar_crea_sesion(client, facilitador, app):
+    eval_id = _crear_eval_directa(app, facilitador.id, titulo="Para lanzar")
+    _login(client)
+    resp = client.post(
+        f"/evaluaciones/{eval_id}/sesiones/abrir", follow_redirects=False
+    )
+    assert resp.status_code in (302, 303)   # redirige a la sesion recien creada
+    with app.app_context():
+        s = db.session.query(Sesion).filter_by(evaluacion_id=eval_id).first()
+        assert s is not None
+        assert s.estado == "abierta"
