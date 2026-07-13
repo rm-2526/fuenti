@@ -9,14 +9,13 @@
 <body class="bg-light">
   <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
     <div class="container">
-      <a class="navbar-brand" href="{{ url_for('index') }}">Fuenti</a>
-      <div class="d-flex">
+      <a class="navbar-brand" href="{{ url_for('dashboard') if current_user.is_authenticated else url_for('index') }}">Fuenti</a>
+      <div class="d-flex align-items-center">
         {% if current_user.is_authenticated %}
+          <a class="nav-link text-light me-2" href="{{ url_for('dashboard') }}">Inicio</a>
+          <a class="nav-link text-light me-3" href="{{ url_for('evaluaciones.listado') }}">Biblioteca</a>
           <span class="navbar-text text-light me-3">{{ current_user.nombre }}</span>
           <a class="btn btn-outline-light btn-sm" href="{{ url_for('auth.logout') }}">Cerrar sesión</a>
-          <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('evaluaciones.listado') }}">Evaluaciones</a>
-          </li>
         {% else %}
           <a class="btn btn-outline-light btn-sm" href="{{ url_for('auth.login') }}">Iniciar sesión</a>
         {% endif %}
