@@ -4,6 +4,8 @@
 <h1 class="h3 mb-1">Iniciar evaluación</h1>
 <p class="text-muted mb-4">
   Elige una evaluación y abre una sesión para recibir participantes.
+  El umbral viene cargado con el de la evaluación; puedes cambiarlo solo para
+  esta sesión. Una vez abierta, el umbral queda fijo.
 </p>
 
 {% if evaluaciones %}
@@ -30,7 +32,19 @@
             {% if e.preguntas %}
               <form method="POST"
                     action="{{ url_for('evaluaciones.abrir_sesion', eval_id=e.id) }}"
-                    class="d-inline">
+                    class="d-inline-flex align-items-center gap-2">
+                <label for="umbral-{{ e.id }}" class="form-label mb-0 small text-muted">
+                  Umbral
+                </label>
+                <div class="input-group input-group-sm" style="width: 6.5rem;">
+                  <input type="number"
+                         class="form-control"
+                         id="umbral-{{ e.id }}"
+                         name="umbral"
+                         value="{{ e.umbral_aprobacion }}"
+                         min="0" max="100" step="1" required>
+                  <span class="input-group-text">%</span>
+                </div>
                 <button type="submit" class="btn btn-sm btn-primary">Abrir sesión</button>
               </form>
             {% else %}

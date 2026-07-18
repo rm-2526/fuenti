@@ -11,10 +11,13 @@
   </div>
 
   <div class="mb-4">
-    <label for="umbral" class="form-label">Umbral de aprobación (%)</label>
+    <label for="umbral" class="form-label">Umbral de aprobación por defecto (%)</label>
     <input type="number" class="form-control" id="umbral" name="umbral"
            min="0" max="100" value="{{ umbral or '60' }}" required style="max-width: 150px;">
-    <div class="form-text">Porcentaje mínimo para aprobar (0 a 100).</div>
+    <div class="form-text">
+      Porcentaje mínimo para aprobar (0 a 100). Es el valor que vendrá cargado
+      al abrir una sesión; ahí puedes cambiarlo solo para esa sesión.
+    </div>
   </div>
 
   <h2 class="h5 mb-3">Preguntas</h2>

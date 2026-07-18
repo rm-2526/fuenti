@@ -161,14 +161,31 @@ def abrir_sesion(eval_id):
 
     # Validacion de negocio: no se puede abrir una sesion para una evaluacion
     # sin preguntas (el participante no tendria nada que responder).
+    # Se vuelve a Iniciar, que es desde donde se abren las sesiones.
     if not evaluacion.preguntas:
         flash(
             "No se puede abrir una sesión: la evaluación no tiene preguntas.",
             "danger",
         )
-        return redirect(url_for("evaluaciones.detalle", eval_id=eval_id))
+        return redirect(url_for("evaluaciones.iniciar"))
 
-    sesion = _crear_sesion_con_codigo_unico(evaluacion.id)
+    # Umbral de esta sesion: viene del formulario de Iniciar, pre-cargado con
+    # el de la evaluacion. Si el campo no viene (o viene vacio), se usa el de
+    # la evaluacion como valor por defecto.
+    umbral_str = request.form.get("umbral", "").strip()
+    if umbral_str == "":
+        umbral = evaluacion.umbral_aprobacion
+    else:
+        try:
+            umbral = int(umbral_str)
+        except ValueError:
+            flash("El umbral debe ser un número entero.", "danger")
+            return redirect(url_for("evaluaciones.iniciar"))
+        if not 0 <= umbral <= 100:
+            flash("El umbral debe estar entre 0 y 100.", "danger")
+            return redirect(url_for("evaluaciones.iniciar"))
+
+    sesion = _crear_sesion_con_codigo_unico(evaluacion.id, umbral)
     flash(f"Sesión abierta. Código: {sesion.codigo}", "success")
     return redirect(
         url_for("evaluaciones.detalle_sesion", eval_id=eval_id, sesion_id=sesion.id)
@@ -336,8 +353,10 @@ def _participantes_ordenados(sesion: Sesion) -> list:
     return sorted(sesion.participantes, key=lambda p: p.ingreso_at)
 
 
-def _crear_sesion_con_codigo_unico(evaluacion_id: int) -> Sesion:
+def _crear_sesion_con_codigo_unico(evaluacion_id: int, umbral: int) -> Sesion:
     """Crea una Sesion con codigo unico, reintentando si hay colision.
+
+    `umbral` queda fijado en la sesion al abrirla y no se edita despues.
 
     La unicidad la garantiza la BD (unique constraint en sesion.codigo).
     Si IntegrityError despues de _MAX_REINTENTOS_CODIGO intentos, levanta
@@ -345,7 +364,9 @@ def _crear_sesion_con_codigo_unico(evaluacion_id: int) -> Sesion:
     """
     for _ in range(_MAX_REINTENTOS_CODIGO):
         codigo = generar_codigo_sesion()
-        sesion = Sesion(evaluacion_id=evaluacion_id, codigo=codigo)
+        sesion = Sesion(
+            evaluacion_id=evaluacion_id, codigo=codigo, umbral_aprobacion=umbral
+        )
         db.session.add(sesion)
         try:
             db.session.commit()

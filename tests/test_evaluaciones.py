@@ -359,7 +359,14 @@ def test_no_editar_evaluacion_ajena(client, facilitador, app):
 def test_no_editar_con_sesion_abierta(client, facilitador, app):
     eval_id = _crear_eval_directa(app, facilitador.id, titulo="Bloqueada")
     with app.app_context():
-        db.session.add(Sesion(evaluacion_id=eval_id, codigo="OPEN99", estado="abierta"))
+        db.session.add(
+            Sesion(
+                evaluacion_id=eval_id,
+                codigo="OPEN99",
+                estado="abierta",
+                umbral_aprobacion=60,
+            )
+        )
         db.session.commit()
 
     _login(client)
@@ -391,7 +398,12 @@ def test_editar_evaluacion_ya_respondida_suelta_enlace_y_conserva_foto(
     """
     eval_id = _crear_eval_directa(app, facilitador.id, titulo="Suma")
     with app.app_context():
-        s = Sesion(evaluacion_id=eval_id, codigo="EDT999", estado="abierta")
+        s = Sesion(
+            evaluacion_id=eval_id,
+            codigo="EDT999",
+            estado="abierta",
+            umbral_aprobacion=60,
+        )
         db.session.add(s)
         db.session.commit()
         sesion_id = s.id

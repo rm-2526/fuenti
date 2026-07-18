@@ -41,10 +41,20 @@ def _crear_evaluacion_con_pregunta(app, facilitador_id, titulo="Eval test"):
         return e.id
 
 
-def _crear_sesion_directa(app, evaluacion_id, codigo="TESTCD", estado="abierta"):
-    """Crea una Sesion en BD sin pasar por el endpoint. Devuelve el id."""
+def _crear_sesion_directa(
+    app, evaluacion_id, codigo="TESTCD", estado="abierta", umbral=60
+):
+    """Crea una Sesion en BD sin pasar por el endpoint. Devuelve el id.
+
+    El umbral se fija al abrir la sesion, asi que hay que darselo aca.
+    """
     with app.app_context():
-        s = Sesion(evaluacion_id=evaluacion_id, codigo=codigo, estado=estado)
+        s = Sesion(
+            evaluacion_id=evaluacion_id,
+            codigo=codigo,
+            estado=estado,
+            umbral_aprobacion=umbral,
+        )
         db.session.add(s)
         db.session.commit()
         return s.id

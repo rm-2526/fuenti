@@ -247,7 +247,10 @@ def _procesar_respuestas(sesion: Sesion, participante: Participante, preguntas: 
     calificacion = calcular_calificacion(
         puntaje=puntaje,
         total=len(preguntas),
-        umbral=sesion.evaluacion.umbral_aprobacion,
+        # El umbral es el que se fijo AL ABRIR ESTA SESION, no el de la
+        # evaluacion: la misma evaluacion puede rendirse con exigencias
+        # distintas en sesiones distintas.
+        umbral=sesion.umbral_aprobacion,
     )
 
     for r in respuestas_a_crear:
@@ -262,7 +265,7 @@ def _procesar_respuestas(sesion: Sesion, participante: Participante, preguntas: 
             aprobado=calificacion.aprobado,
             # Foto congelada del encabezado: titulo y umbral aplicados.
             evaluacion_titulo=sesion.evaluacion.titulo,
-            umbral_aprobacion=sesion.evaluacion.umbral_aprobacion,
+            umbral_aprobacion=sesion.umbral_aprobacion,
         )
     )
     participante.finalizado_at = ahora_utc()

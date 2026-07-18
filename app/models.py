@@ -87,6 +87,17 @@ class Sesion(db.Model):
     evaluacion_id: Mapped[int] = mapped_column(ForeignKey("evaluacion.id"), nullable=False)
     codigo: Mapped[str] = mapped_column(String(10), unique=True, nullable=False)
     estado: Mapped[str] = mapped_column(String(20), nullable=False, default="abierta")
+    # Umbral de aprobacion (0-100) FIJADO AL ABRIR la sesion. Se toma de la
+    # evaluacion como valor por defecto, pero el facilitador puede cambiarlo
+    # al abrir: la misma evaluacion puede exigir 50 en un diagnostico y 70 en
+    # una certificacion, sin editar la evaluacion (y sin mezclar versiones).
+    # Una vez abierta la sesion NO se edita: la nota que se le prometio a un
+    # participante no puede cambiar despues. La calificacion lee este valor,
+    # no el de la evaluacion.
+    # Ojo: dos sesiones de la misma evaluacion pueden tener umbrales distintos,
+    # asi que sus NOTAS no son comparables entre si. El seguimiento longitudinal
+    # se compara por porcentaje de logro, que no depende del umbral.
+    umbral_aprobacion: Mapped[int] = mapped_column(Integer, nullable=False)
     abierta_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=ahora_utc)
     cerrada_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 

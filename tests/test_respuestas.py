@@ -65,9 +65,14 @@ def _crear_eval(app, facilitador_id, n_preguntas=2, umbral=60):
         return eval_id, info
 
 
-def _abrir_sesion(app, eval_id, codigo="RESP34", estado="abierta"):
+def _abrir_sesion(app, eval_id, codigo="RESP34", estado="abierta", umbral=60):
     with app.app_context():
-        s = Sesion(evaluacion_id=eval_id, codigo=codigo, estado=estado)
+        s = Sesion(
+            evaluacion_id=eval_id,
+            codigo=codigo,
+            estado=estado,
+            umbral_aprobacion=umbral,
+        )
         db.session.add(s)
         db.session.commit()
         return s.id
