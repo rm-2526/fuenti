@@ -1,8 +1,27 @@
 {% extends "base.html" %}
 {% block title %}Historial del participante — Fuenti{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
+{#
+  Estilos solo para imprimir: al hacer "Imprimir" o "Guardar como PDF" se
+  esconden la barra de navegación y los botones, para que el PDF salga limpio.
+#}
+<style>
+  @media print {
+    .navbar { display: none !important; }
+    .no-print { display: none !important; }
+    body { background: #fff !important; }
+  }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-3 no-print">
   <a href="{{ url_for('evaluaciones.informes') }}" class="btn btn-link">← Volver a Informes</a>
+  <div>
+    <a href="{{ url_for('evaluaciones.exportar_historial_csv', hash_id=hash_id) }}"
+       class="btn btn-outline-primary btn-sm me-2">Descargar CSV</a>
+    <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print();">
+      Imprimir / Guardar como PDF
+    </button>
+  </div>
 </div>
 
 <h1 class="h3 mb-1">{{ nombre or "(sin nombre)" }}</h1>

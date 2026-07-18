@@ -233,6 +233,56 @@ def agrupar_historial(resultados_con_contexto) -> list[GrupoHistorial]:
         resultado_final.append(GrupoHistorial(evaluacion_titulo=titulo, filas=filas))
     return resultado_final
 
+
+# Cabecera del CSV del historial. La evaluación va primera para que el CSV
+# conserve la agrupación al ordenarlo en Excel.
+ENCABEZADOS_CSV_HISTORIAL = [
+    "Evaluación",
+    "Fecha",
+    "Código",
+    "% de logro",
+    "Nota",
+    "Umbral",
+    "Resultado",
+]
+
+
+def _texto_resultado(aprobado) -> str:
+    if aprobado is None:
+        return "Pendiente"
+    return "Aprobado" if aprobado else "Reprobado"
+
+
+def filas_csv_historial(grupos, formatear_fecha=str) -> list[list[str]]:
+    """Aplana el historial agrupado en filas para el CSV (sin la cabecera).
+
+    `grupos` es una lista de GrupoHistorial. Se genera una fila por sesión
+    rendida, con la evaluación como primera columna. Para las pendientes (sin
+    resultado) las columnas de % / nota van vacías y el resultado dice
+    "Pendiente", igual que en la tabla en pantalla.
+
+    `formatear_fecha` recibe el datetime de la fila y devuelve el texto a
+    mostrar. Por defecto es str; la ruta le pasa hora_local para que salga en
+    hora de Chile. Se recibe por argumento para que este helper siga siendo
+    puro (sin depender de la app) y fácil de testear.
+    """
+    filas = []
+    for grupo in grupos:
+        for f in grupo.filas:
+            filas.append(
+                [
+                    grupo.evaluacion_titulo,
+                    formatear_fecha(f.fecha),
+                    f.codigo,
+                    "" if f.porcentaje is None else f"{f.porcentaje:.1f}",
+                    "" if f.nota is None else f"{f.nota:.1f}",
+                    f"{f.umbral}",
+                    _texto_resultado(f.aprobado),
+                ]
+            )
+    return filas
+
+
 # ----------------------------- Lista por participante -----------------------------
 
 @dataclass(frozen=True)

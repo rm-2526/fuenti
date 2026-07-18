@@ -17,16 +17,18 @@ from flask import (
 from flask_login import current_user, login_required
 from sqlalchemy.exc import IntegrityError
 
-from app import db
+from app import db, hora_local
 from app.evaluaciones import bp
 from app.models import Alternativa, Evaluacion, Participante, Pregunta, Resultado, Sesion
 from app.utils.sesion import generar_codigo_sesion
 from app.utils.estadisticas import resumir_resultados
 from app.utils.reporte import (
     ENCABEZADOS_CSV,
+    ENCABEZADOS_CSV_HISTORIAL,
     agrupar_historial,
     agrupar_personas,
     desglose_desde_respuestas,
+    filas_csv_historial,
     filas_csv_sesion,
     filas_informe_sesion,
 )
@@ -319,21 +321,14 @@ def informe_individual(eval_id, sesion_id, participante_id):
         desglose=desglose,
     )
 
-@bp.route("/participante/<hash_id>/historial")
-@login_required
-def historial_participante(hash_id):
-    """Historial longitudinal de una persona: todas sus sesiones (solo de las
-    evaluaciones de ESTE facilitador), agrupadas por evaluación y ordenadas
-    cronológicamente dentro de cada una.
+def _participantes_historial(hash_id):
+    """Instancias (Participante) de una persona en sesiones CERRADAS de
+    evaluaciones del facilitador actual. Lista vacía si no hay ninguna.
 
-    La persona se identifica por su identificador_hash (el hash del RUT). No se
-    guarda ni se muestra el RUT: el hash es la llave estable entre sesiones.
-    Se filtra por facilitador dueño, igual que el resto de Informes: cada
-    facilitador ve solo lo suyo.
+    Comparte el filtro de dueño con el resto de Informes: cada facilitador ve
+    solo lo suyo. La usan tanto el historial en pantalla como su exportación.
     """
-    # Todas las instancias de esta persona en sesiones CERRADAS de evaluaciones
-    # del facilitador actual. Cada Participante es una instancia (una sesión).
-    participantes = (
+    return (
         db.session.query(Participante)
         .join(Sesion, Participante.sesion_id == Sesion.id)
         .join(Evaluacion, Sesion.evaluacion_id == Evaluacion.id)
@@ -345,16 +340,29 @@ def historial_participante(hash_id):
         .all()
     )
 
-    if not participantes:
-        abort(404)
 
-    # El nombre puede variar entre sesiones (o faltar); tomamos el más reciente
-    # no vacío como etiqueta. La identidad la da el hash, no el nombre.
-    nombre = None
+def _nombre_reciente(participantes):
+    """El nombre puede variar entre sesiones (o faltar); se toma el más reciente
+    no vacío como etiqueta. La identidad la da el hash, no el nombre."""
     for p in sorted(participantes, key=lambda p: p.ingreso_at, reverse=True):
         if p.nombre and p.nombre.strip():
-            nombre = p.nombre.strip()
-            break
+            return p.nombre.strip()
+    return None
+
+
+@bp.route("/participante/<hash_id>/historial")
+@login_required
+def historial_participante(hash_id):
+    """Historial longitudinal de una persona: todas sus sesiones (solo de las
+    evaluaciones de ESTE facilitador), agrupadas por evaluación y ordenadas
+    cronológicamente dentro de cada una.
+
+    La persona se identifica por su identificador_hash (el hash del RUT). No se
+    guarda ni se muestra el RUT: el hash es la llave estable entre sesiones.
+    """
+    participantes = _participantes_historial(hash_id)
+    if not participantes:
+        abort(404)
 
     contexto = [
         (p.sesion.evaluacion.titulo, p.sesion, p.resultado) for p in participantes
@@ -363,9 +371,43 @@ def historial_participante(hash_id):
 
     return render_template(
         "evaluaciones/historial_participante.html",
-        nombre=nombre,
+        nombre=_nombre_reciente(participantes),
+        hash_id=hash_id,
         hash_corto=hash_id[:10],
         grupos=grupos,
+    )
+
+
+@bp.route("/participante/<hash_id>/historial/export.csv")
+@login_required
+def exportar_historial_csv(hash_id):
+    """Descarga el historial de la persona como CSV: una fila por sesión rendida,
+    agrupada por evaluación (la evaluación es la primera columna).
+
+    Mismos guards que el historial en pantalla (login + dueño): si no hay
+    sesiones cerradas de este facilitador para ese hash, responde 404. Se le
+    antepone un BOM para que Excel muestre bien los acentos.
+    """
+    participantes = _participantes_historial(hash_id)
+    if not participantes:
+        abort(404)
+
+    contexto = [
+        (p.sesion.evaluacion.titulo, p.sesion, p.resultado) for p in participantes
+    ]
+    grupos = agrupar_historial(contexto)
+
+    buffer = io.StringIO()
+    buffer.write("\ufeff")  # BOM: ayuda a Excel a leer UTF-8 (acentos)
+    escritor = csv.writer(buffer)
+    escritor.writerow(ENCABEZADOS_CSV_HISTORIAL)
+    escritor.writerows(filas_csv_historial(grupos, formatear_fecha=hora_local))
+
+    nombre_archivo = f"historial_{hash_id[:10]}.csv"
+    return Response(
+        buffer.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{nombre_archivo}"'},
     )
 
 
