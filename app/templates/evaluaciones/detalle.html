@@ -50,9 +50,14 @@
      class="btn btn-outline-primary">Editar evaluación</a>
 
   <form method="POST"
-        action="{{ url_for('evaluaciones.eliminar', eval_id=evaluacion.id) }}"
-        onsubmit="return confirm('¿Eliminar esta evaluación? Esta acción no se puede deshacer. Si tiene sesiones, también se borrarán todas las respuestas asociadas.');">
-    <button type="submit" class="btn btn-outline-danger">Eliminar evaluación</button>
+        action="{{ url_for('evaluaciones.eliminar', eval_id=evaluacion.id) }}">
+    <button type="submit"
+            class="btn btn-outline-danger js-confirmar"
+            data-confirmar-titulo="Eliminar evaluación"
+            data-confirmar-mensaje="¿Eliminar «{{ evaluacion.titulo }}»? Esta acción no se puede deshacer. Si tiene sesiones, también se borrarán todas las respuestas asociadas."
+            data-confirmar-boton="Eliminar">
+      Eliminar evaluación
+    </button>
   </form>
 </div>
 {% endblock %}

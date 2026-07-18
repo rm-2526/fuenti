@@ -38,6 +38,57 @@
     {% block content %}{% endblock %}
   </main>
 
+  {# Modal de confirmación reutilizable. Cualquier botón con la clase
+     .js-confirmar abre este modal en lugar del confirm() del navegador.
+     El texto se toma de los data-attributes del botón (ver listado.html
+     y detalle.html). #}
+  <div class="modal fade" id="modalConfirmar" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 class="modal-title fs-5" id="modalConfirmarTitulo">Confirmar</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body" id="modalConfirmarMensaje"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-danger" id="modalConfirmarAceptar">Confirmar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // Reemplaza el confirm() del navegador por el modal de arriba.
+    (function () {
+      var modalEl = document.getElementById("modalConfirmar");
+      if (!modalEl) return;
+      var modal = new bootstrap.Modal(modalEl);
+      var tituloEl = document.getElementById("modalConfirmarTitulo");
+      var mensajeEl = document.getElementById("modalConfirmarMensaje");
+      var aceptarEl = document.getElementById("modalConfirmarAceptar");
+      var formPendiente = null;
+
+      // Delegación de eventos: funciona con uno o con muchos botones
+      // (por ejemplo, cada fila de la Biblioteca).
+      document.addEventListener("click", function (e) {
+        var btn = e.target.closest(".js-confirmar");
+        if (!btn) return;
+        e.preventDefault();                 // no enviar el formulario todavía
+        formPendiente = btn.form;
+        tituloEl.textContent = btn.dataset.confirmarTitulo || "Confirmar";
+        mensajeEl.textContent = btn.dataset.confirmarMensaje || "¿Confirmar esta acción?";
+        aceptarEl.textContent = btn.dataset.confirmarBoton || "Confirmar";
+        aceptarEl.className = "btn " + (btn.dataset.confirmarClase || "btn-danger");
+        modal.show();
+      });
+
+      // Al aceptar, se envía el formulario asociado al botón que abrió el modal.
+      aceptarEl.addEventListener("click", function () {
+        if (formPendiente) formPendiente.submit();
+      });
+    })();
+  </script>
 </body>
 </html>

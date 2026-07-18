@@ -32,9 +32,14 @@
           <td class="text-end">
             <form method="POST"
                   action="{{ url_for('evaluaciones.eliminar', eval_id=e.id) }}"
-                  class="d-inline"
-                  onsubmit="return confirm('¿Eliminar esta evaluación? Esta acción no se puede deshacer.');">
-              <button type="submit" class="btn btn-sm btn-outline-danger">Eliminar</button>
+                  class="d-inline">
+              <button type="submit"
+                      class="btn btn-sm btn-outline-danger js-confirmar"
+                      data-confirmar-titulo="Eliminar evaluación"
+                      data-confirmar-mensaje="¿Eliminar «{{ e.titulo }}»? Esta acción no se puede deshacer."
+                      data-confirmar-boton="Eliminar">
+                Eliminar
+              </button>
             </form>
           </td>
         </tr>

@@ -226,9 +226,14 @@
 
 {% if sesion.estado == "abierta" %}
   <form method="POST"
-        action="{{ url_for('evaluaciones.cerrar_sesion', eval_id=evaluacion.id, sesion_id=sesion.id) }}"
-        onsubmit="return confirm('¿Cerrar esta sesión? No aceptará más ingresos.');">
-    <button type="submit" class="btn btn-outline-danger">Cerrar sesión</button>
+        action="{{ url_for('evaluaciones.cerrar_sesion', eval_id=evaluacion.id, sesion_id=sesion.id) }}">
+    <button type="submit"
+            class="btn btn-outline-danger js-confirmar"
+            data-confirmar-titulo="Cerrar sesión"
+            data-confirmar-mensaje="¿Cerrar esta sesión? No aceptará más ingresos ni respuestas."
+            data-confirmar-boton="Cerrar sesión">
+      Cerrar sesión
+    </button>
   </form>
 {% endif %}
 
