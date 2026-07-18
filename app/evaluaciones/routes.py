@@ -18,12 +18,13 @@ from sqlalchemy.exc import IntegrityError
 
 from app import db
 from app.evaluaciones import bp
-from app.models import Alternativa, Evaluacion, Participante, Pregunta, Sesion
+from app.models import Alternativa, Evaluacion, Participante, Pregunta, Resultado, Sesion
 from app.utils.sesion import generar_codigo_sesion
 from app.utils.estadisticas import resumir_resultados
 from app.utils.reporte import (
     ENCABEZADOS_CSV,
     agrupar_historial,
+    agrupar_personas,
     desglose_desde_respuestas,
     filas_csv_sesion,
     filas_informe_sesion,
@@ -88,6 +89,34 @@ def informes():
         if cerradas:
             grupos.append((e, cerradas))
     return render_template("evaluaciones/informes.html", grupos=grupos)
+
+@bp.route("/participantes")
+@login_required
+def informes_por_participante():
+    """Vista 'Por participante' de Informes: lista de personas que han rendido
+    (finalizado) al menos una sesión en evaluaciones de este facilitador.
+
+    Cada persona aparece una sola vez (agrupada por hash) y enlaza a su
+    historial longitudinal. Solo se cuentan sesiones cerradas con resultado:
+    alguien que ingresó pero nunca finalizó no aparece acá (su estado se ve en
+    la vista por sesión).
+    """
+    participantes = (
+        db.session.query(Participante)
+        .join(Sesion, Participante.sesion_id == Sesion.id)
+        .join(Evaluacion, Sesion.evaluacion_id == Evaluacion.id)
+        .join(Resultado, Resultado.participante_id == Participante.id)
+        .filter(
+            Evaluacion.facilitador_id == current_user.id,
+            Sesion.estado == "cerrada",
+        )
+        .all()
+    )
+    personas = agrupar_personas(participantes)
+    return render_template(
+        "evaluaciones/informes_participantes.html",
+        personas=personas,
+    )
 
 
 @bp.route("/nueva", methods=["GET", "POST"])

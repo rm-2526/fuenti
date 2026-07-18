@@ -232,3 +232,54 @@ def agrupar_historial(resultados_con_contexto) -> list[GrupoHistorial]:
         filas = sorted(grupos[titulo], key=lambda f: f.fecha)
         resultado_final.append(GrupoHistorial(evaluacion_titulo=titulo, filas=filas))
     return resultado_final
+
+# ----------------------------- Lista por participante -----------------------------
+
+@dataclass(frozen=True)
+class FilaPersona:
+    """Una persona en la lista 'Por participante'. Agrupa todas sus sesiones
+    (identificadas por el mismo hash) en una sola fila."""
+    hash_id: str           # identificador_hash completo (para enlazar al historial)
+    hash_corto: str        # primeros caracteres, para mostrar
+    nombre: str            # etiqueta legible; SIN_NOMBRE si no tiene
+    n_sesiones: int        # cuántas sesiones finalizadas tiene
+
+
+def agrupar_personas(participantes) -> list[FilaPersona]:
+    """Agrupa instancias de Participante por su identificador_hash, para que
+    cada persona aparezca UNA vez aunque haya rendido varias sesiones.
+
+    `participantes` es una lista de objetos Participante (cada uno con
+    .identificador_hash, .nombre, .ingreso_at). El caller ya filtró a quienes
+    tienen al menos un resultado. Se cuenta cuántas instancias (sesiones) tiene
+    cada hash. El nombre mostrado es el más reciente no vacío, porque puede
+    variar entre sesiones; la identidad la da el hash, no el nombre.
+
+    Devuelve la lista ordenada por nombre (los sin nombre al final).
+    """
+    por_hash: dict[str, list] = {}
+    for p in participantes:
+        por_hash.setdefault(p.identificador_hash, []).append(p)
+
+    filas = []
+    for hash_id, instancias in por_hash.items():
+        mas_reciente_primero = sorted(
+            instancias, key=lambda p: p.ingreso_at, reverse=True
+        )
+        nombre = SIN_NOMBRE
+        for p in mas_reciente_primero:
+            if p.nombre and p.nombre.strip():
+                nombre = p.nombre.strip()
+                break
+        filas.append(
+            FilaPersona(
+                hash_id=hash_id,
+                hash_corto=_hash_corto(hash_id),
+                nombre=nombre,
+                n_sesiones=len(instancias),
+            )
+        )
+
+    # Orden: por nombre alfabético; los "(sin nombre)" al final.
+    filas.sort(key=lambda f: (f.nombre == SIN_NOMBRE, f.nombre.lower()))
+    return filas

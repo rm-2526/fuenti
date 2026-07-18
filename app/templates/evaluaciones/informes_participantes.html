@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Informes por participante — Fuenti{% endblock %}
+{% block content %}
+<h1 class="h3 mb-1">Informes</h1>
+<p class="text-muted mb-3">
+  Personas que han rendido al menos una sesión.
+</p>
+
+<ul class="nav nav-tabs mb-4">
+  <li class="nav-item">
+    <a class="nav-link" href="{{ url_for('evaluaciones.informes') }}">Por sesión</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link active" href="{{ url_for('evaluaciones.informes_por_participante') }}">Por participante</a>
+  </li>
+</ul>
+
+{% if personas %}
+  <div class="table-responsive">
+    <table class="table table-hover align-middle">
+      <thead>
+        <tr>
+          <th>Participante</th>
+          <th>Identificador</th>
+          <th class="text-end">Sesiones</th>
+          <th class="text-end">Historial</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for persona in personas %}
+        <tr>
+          <td>{{ persona.nombre }}</td>
+          <td class="font-monospace text-muted">{{ persona.hash_corto }}…</td>
+          <td class="text-end">{{ persona.n_sesiones }}</td>
+          <td class="text-end">
+            <a href="{{ url_for('evaluaciones.historial_participante', hash_id=persona.hash_id) }}"
+               class="btn btn-sm btn-outline-primary">Ver historial</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <div class="alert alert-info">
+    Todavía no hay participantes con sesiones finalizadas. Cuando alguien rinda y cierres su sesión, aparecerá aquí.
+  </div>
+{% endif %}
+{% endblock %}
