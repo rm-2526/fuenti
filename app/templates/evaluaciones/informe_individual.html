@@ -18,9 +18,13 @@
 <div class="d-flex justify-content-between align-items-center mb-3 no-print">
   <a href="{{ url_for('evaluaciones.detalle_sesion', eval_id=evaluacion.id, sesion_id=sesion.id) }}"
      class="btn btn-link">← Volver a la sesión</a>
-  <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print();">
-    Imprimir / Guardar como PDF
-  </button>
+  <div>
+    <a href="{{ url_for('evaluaciones.historial_participante', hash_id=participante.identificador_hash) }}"
+       class="btn btn-outline-secondary btn-sm me-2">Ver historial</a>
+    <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print();">
+      Imprimir / Guardar como PDF
+    </button>
+  </div>
 </div>
 
 <div class="card">

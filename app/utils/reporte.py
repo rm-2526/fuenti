@@ -181,3 +181,54 @@ def desglose_desde_respuestas(respuestas) -> list[LineaDesglose]:
             )
         )
     return lineas
+
+# ----------------------------- Historial por persona -----------------------------
+
+@dataclass(frozen=True)
+class FilaHistorial:
+    """Una sesión rendida por la persona, dentro de un grupo de evaluación."""
+    fecha: object          # datetime de cierre de la sesión (para mostrar)
+    codigo: str            # código de la sesión
+    porcentaje: float | None
+    nota: float | None
+    umbral: int
+    aprobado: bool | None
+
+
+@dataclass(frozen=True)
+class GrupoHistorial:
+    """Todas las sesiones de la persona en UNA evaluación, orden cronológico."""
+    evaluacion_titulo: str
+    filas: list           # list[FilaHistorial], de la más antigua a la más nueva
+
+
+def agrupar_historial(resultados_con_contexto) -> list[GrupoHistorial]:
+    """Agrupa el historial de una persona por evaluación.
+
+    `resultados_con_contexto` es una lista de tuplas
+    (evaluacion_titulo, sesion, resultado), donde resultado puede ser None si
+    la persona ingresó pero no finalizó esa sesión.
+
+    Devuelve una lista de GrupoHistorial, un grupo por evaluación (ordenados
+    por título), y dentro de cada grupo las sesiones de la más antigua a la más
+    nueva. La comparación válida es DENTRO de un grupo (misma evaluación): por
+    eso se separan, para no invitar a comparar % de logro entre evaluaciones
+    distintas, que no significan lo mismo.
+    """
+    grupos: dict[str, list] = {}
+    for evaluacion_titulo, sesion, resultado in resultados_con_contexto:
+        fila = FilaHistorial(
+            fecha=sesion.cerrada_at or sesion.abierta_at,
+            codigo=sesion.codigo,
+            porcentaje=resultado.porcentaje if resultado else None,
+            nota=resultado.nota if resultado else None,
+            umbral=sesion.umbral_aprobacion,
+            aprobado=resultado.aprobado if resultado else None,
+        )
+        grupos.setdefault(evaluacion_titulo, []).append(fila)
+
+    resultado_final = []
+    for titulo in sorted(grupos.keys()):
+        filas = sorted(grupos[titulo], key=lambda f: f.fecha)
+        resultado_final.append(GrupoHistorial(evaluacion_titulo=titulo, filas=filas))
+    return resultado_final

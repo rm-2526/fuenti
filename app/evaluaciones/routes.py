@@ -23,6 +23,7 @@ from app.utils.sesion import generar_codigo_sesion
 from app.utils.estadisticas import resumir_resultados
 from app.utils.reporte import (
     ENCABEZADOS_CSV,
+    agrupar_historial,
     desglose_desde_respuestas,
     filas_csv_sesion,
     filas_informe_sesion,
@@ -255,6 +256,55 @@ def informe_individual(eval_id, sesion_id, participante_id):
         participante=participante,
         resultado=participante.resultado,
         desglose=desglose,
+    )
+
+@bp.route("/participante/<hash_id>/historial")
+@login_required
+def historial_participante(hash_id):
+    """Historial longitudinal de una persona: todas sus sesiones (solo de las
+    evaluaciones de ESTE facilitador), agrupadas por evaluación y ordenadas
+    cronológicamente dentro de cada una.
+
+    La persona se identifica por su identificador_hash (el hash del RUT). No se
+    guarda ni se muestra el RUT: el hash es la llave estable entre sesiones.
+    Se filtra por facilitador dueño, igual que el resto de Informes: cada
+    facilitador ve solo lo suyo.
+    """
+    # Todas las instancias de esta persona en sesiones CERRADAS de evaluaciones
+    # del facilitador actual. Cada Participante es una instancia (una sesión).
+    participantes = (
+        db.session.query(Participante)
+        .join(Sesion, Participante.sesion_id == Sesion.id)
+        .join(Evaluacion, Sesion.evaluacion_id == Evaluacion.id)
+        .filter(
+            Participante.identificador_hash == hash_id,
+            Evaluacion.facilitador_id == current_user.id,
+            Sesion.estado == "cerrada",
+        )
+        .all()
+    )
+
+    if not participantes:
+        abort(404)
+
+    # El nombre puede variar entre sesiones (o faltar); tomamos el más reciente
+    # no vacío como etiqueta. La identidad la da el hash, no el nombre.
+    nombre = None
+    for p in sorted(participantes, key=lambda p: p.ingreso_at, reverse=True):
+        if p.nombre and p.nombre.strip():
+            nombre = p.nombre.strip()
+            break
+
+    contexto = [
+        (p.sesion.evaluacion.titulo, p.sesion, p.resultado) for p in participantes
+    ]
+    grupos = agrupar_historial(contexto)
+
+    return render_template(
+        "evaluaciones/historial_participante.html",
+        nombre=nombre,
+        hash_corto=hash_id[:10],
+        grupos=grupos,
     )
 
 
