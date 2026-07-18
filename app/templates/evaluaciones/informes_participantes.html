@@ -15,6 +15,23 @@
   </li>
 </ul>
 
+<form method="get" action="{{ url_for('evaluaciones.informes_por_participante') }}" class="row g-2 mb-4">
+  <div class="col-sm-5">
+    <input type="text" name="nombre" class="form-control" placeholder="Buscar por nombre"
+           value="{{ nombre_q or '' }}">
+  </div>
+  <div class="col-sm-4">
+    <input type="text" name="rut" class="form-control" placeholder="RUT completo (ej: 12.345.678-5)"
+           value="{{ rut_q or '' }}">
+  </div>
+  <div class="col-sm-3 d-flex gap-2">
+    <button type="submit" class="btn btn-primary flex-grow-1">Buscar</button>
+    {% if nombre_q or rut_q %}
+      <a href="{{ url_for('evaluaciones.informes_por_participante') }}" class="btn btn-outline-secondary">Limpiar</a>
+    {% endif %}
+  </div>
+</form>
+
 {% if personas %}
   <div class="table-responsive">
     <table class="table table-hover align-middle">
@@ -43,7 +60,11 @@
   </div>
 {% else %}
   <div class="alert alert-info">
-    Todavía no hay participantes con sesiones finalizadas. Cuando alguien rinda y cierres su sesión, aparecerá aquí.
+    {% if nombre_q or rut_q %}
+      No se encontraron participantes con esos criterios de búsqueda.
+    {% else %}
+      Todavía no hay participantes con sesiones finalizadas. Cuando alguien rinda y cierres su sesión, aparecerá aquí.
+    {% endif %}
   </div>
 {% endif %}
 {% endblock %}

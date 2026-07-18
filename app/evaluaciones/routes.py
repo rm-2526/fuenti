@@ -6,6 +6,7 @@ from dataclasses import asdict
 from flask import (
     Response,
     abort,
+    current_app,
     flash,
     jsonify,
     redirect,
@@ -30,6 +31,7 @@ from app.utils.reporte import (
     filas_informe_sesion,
 )
 from app.models import ahora_utc
+from app.utils.rut import hash_rut, validar_rut
 
 
 # Maximo de reintentos para generar un codigo de sesion unico.
@@ -96,12 +98,18 @@ def informes_por_participante():
     """Vista 'Por participante' de Informes: lista de personas que han rendido
     (finalizado) al menos una sesión en evaluaciones de este facilitador.
 
-    Cada persona aparece una sola vez (agrupada por hash) y enlaza a su
-    historial longitudinal. Solo se cuentan sesiones cerradas con resultado:
-    alguien que ingresó pero nunca finalizó no aparece acá (su estado se ve en
-    la vista por sesión).
+    Acepta dos filtros opcionales por query string:
+      - ?nombre=<texto>  : coincidencia parcial, sin distinguir mayúsculas.
+      - ?rut=<rut>       : RUT completo; se valida, se hashea y se busca el
+                           hash exacto. No hay búsqueda parcial por RUT porque
+                           el RUT no se almacena, solo su hash.
+    Los dos filtros se pueden combinar. Si el RUT es inválido, se avisa y no
+    se aplica ese filtro.
     """
-    participantes = (
+    nombre_q = request.args.get("nombre", "").strip()
+    rut_q = request.args.get("rut", "").strip()
+
+    consulta = (
         db.session.query(Participante)
         .join(Sesion, Participante.sesion_id == Sesion.id)
         .join(Evaluacion, Sesion.evaluacion_id == Evaluacion.id)
@@ -110,12 +118,36 @@ def informes_por_participante():
             Evaluacion.facilitador_id == current_user.id,
             Sesion.estado == "cerrada",
         )
-        .all()
     )
+
+    # Filtro por nombre: parcial, insensible a mayúsculas.
+    if nombre_q:
+        consulta = consulta.filter(Participante.nombre.ilike(f"%{nombre_q}%"))
+
+    # Filtro por RUT: exacto vía hash. Mismo pepper y misma función que el
+    # ingreso, así el hash calculado acá coincide con el guardado.
+    rut_invalido = False
+    if rut_q:
+        if validar_rut(rut_q):
+            salt = current_app.config["RUT_SALT"]
+            hash_buscado = hash_rut(rut_q, salt)
+            consulta = consulta.filter(
+                Participante.identificador_hash == hash_buscado
+            )
+        else:
+            rut_invalido = True
+
+    participantes = consulta.all()
     personas = agrupar_personas(participantes)
+
+    if rut_invalido:
+        flash("El RUT ingresado no es válido. Se ignoró ese filtro.", "warning")
+
     return render_template(
         "evaluaciones/informes_participantes.html",
         personas=personas,
+        nombre_q=nombre_q,
+        rut_q=rut_q,
     )
 
 
