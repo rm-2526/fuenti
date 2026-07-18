@@ -3,15 +3,19 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h1 class="h3 mb-0">Sesión de "{{ evaluacion.titulo }}"</h1>
-  {# Se vuelve al lugar donde vive la sesion segun su ciclo de vida:
-     abierta se gestiona en Iniciar, cerrada se consulta en Informes. #}
+  {# Sesion abierta: se vino desde Iniciar, asi que "Volver" es cierto. Se evita
+     "Volver a Iniciar evaluacion" porque "volver a + infinitivo" se lee como
+     "iniciarla de nuevo".
+     Sesion cerrada: NO se dice "Volver a Informes", porque al cerrar la sesion
+     el facilitador se queda en esta misma pagina sin haber pasado nunca por
+     Informes. Es un destino (donde vivira esto manana), no un regreso. #}
   {% if sesion.estado == "abierta" %}
     <a href="{{ url_for('evaluaciones.iniciar') }}" class="btn btn-link">
-      ← Volver a Iniciar evaluación
+      ← Volver
     </a>
   {% else %}
     <a href="{{ url_for('evaluaciones.informes') }}" class="btn btn-link">
-      ← Volver a Informes
+      Ir a Informes →
     </a>
   {% endif %}
 </div>

@@ -227,7 +227,9 @@ def test_panel_muestra_el_umbral_aplicado(client, facilitador, app):
     assert "85%" in resp.get_data(as_text=True)
 
 
-def test_volver_de_sesion_abierta_lleva_a_iniciar(client, facilitador, app):
+def test_sesion_abierta_ofrece_volver_a_iniciar(client, facilitador, app):
+    """Dice solo "Volver": "Volver a Iniciar evaluación" se leía como
+    "iniciarla de nuevo" ("volver a" + infinitivo = repetir la acción)."""
     eval_id = _crear_eval(app, facilitador.id)
     _login(client)
     _abrir(client, eval_id)
@@ -237,10 +239,14 @@ def test_volver_de_sesion_abierta_lleva_a_iniciar(client, facilitador, app):
     resp = client.get(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}")
     html = resp.get_data(as_text=True)
     assert "/evaluaciones/iniciar" in html
-    assert "Volver a Iniciar evaluación" in html
+    assert "← Volver" in html
+    # No debe sugerir que se vuelve a iniciar la evaluacion.
+    assert "Volver a Iniciar" not in html
 
 
-def test_volver_de_sesion_cerrada_lleva_a_informes(client, facilitador, app):
+def test_sesion_cerrada_ofrece_ir_a_informes(client, facilitador, app):
+    """Al cerrar, el facilitador se queda en esta pagina sin haber pasado por
+    Informes: es un destino, no un regreso. Por eso no dice "Volver"."""
     eval_id = _crear_eval(app, facilitador.id)
     _login(client)
     _abrir(client, eval_id)
@@ -251,7 +257,9 @@ def test_volver_de_sesion_cerrada_lleva_a_informes(client, facilitador, app):
     resp = client.get(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}")
     html = resp.get_data(as_text=True)
     assert "/evaluaciones/informes" in html
-    assert "Volver a Informes" in html
+    assert "Ir a Informes" in html
+    # No se "vuelve" a un lugar donde nunca se estuvo.
+    assert "Volver a Informes" not in html
 
 
 def test_informes_muestra_el_umbral_de_cada_sesion(client, facilitador, app):
