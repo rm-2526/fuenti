@@ -252,3 +252,98 @@ def test_detalle_sesion_abierta_no_redirige(client, facilitador, app):
     _login(client)
     resp = client.get(f"/evaluaciones/{data['eval_id']}/sesiones/{s}")
     assert resp.status_code == 200  # la sesión en vivo se sigue mostrando aquí
+
+
+# ===================== CSV de la matriz =====================
+
+def test_filas_csv_matriz_refleja_la_tabla():
+    from app.utils.reporte import (
+        CeldaMatriz,
+        ColumnaMatriz,
+        FilaMatriz,
+        Matriz,
+        filas_csv_matriz,
+    )
+
+    matriz = Matriz(
+        columnas=[
+            ColumnaMatriz(orden=1, enunciado="Dos mas dos", correcta_letra="A", pct_acierto=100),
+            ColumnaMatriz(orden=2, enunciado="Color", correcta_letra="A", pct_acierto=0),
+        ],
+        filas=[
+            FilaMatriz(
+                participante_id=1, nombre="Ana", hash_corto="hashana",
+                celdas=[CeldaMatriz("A", True), CeldaMatriz("B", False)],
+                nota=5.5, porcentaje=50.0, aprobado=False,
+            ),
+        ],
+    )
+    filas = filas_csv_matriz(matriz)
+
+    assert filas[0] == ["Participante", "P1", "P2", "% de logro", "Nota", "Estado"]
+    assert filas[1] == ["Ana", "A \u2713", "B \u2717", "50.0", "5.5", "Reprobado"]
+    assert filas[2][0] == "% de acierto"
+    assert filas[2][1] == "100%" and filas[2][2] == "0%"
+
+    plano = [celda for fila in filas for celda in fila]
+    assert "Leyenda de preguntas" in plano
+    assert "Dos mas dos" in plano
+
+
+def test_exportar_matriz_csv_requiere_login(client, app):
+    resp = client.get("/evaluaciones/1/sesiones/1/resultados.csv")
+    assert resp.status_code == 302
+    assert "/login" in resp.headers["Location"]
+
+
+def test_exportar_matriz_csv_404_si_no_hay_finalizados(client, facilitador, app):
+    data = _crear_evaluacion_2preguntas(app, facilitador.id)
+    s = _crear_sesion(app, data["eval_id"], "CSVV01")
+    _persona(app, s, "Pendiente", [], finalizado=False)
+
+    _login(client)
+    assert client.get(
+        f"/evaluaciones/{data['eval_id']}/sesiones/{s}/resultados.csv"
+    ).status_code == 404
+
+
+def test_exportar_matriz_csv_contenido(client, facilitador, app):
+    data = _crear_evaluacion_2preguntas(app, facilitador.id)
+    s = _crear_sesion(app, data["eval_id"], "CSVM01")
+    p1, p2 = data["preguntas"][0], data["preguntas"][1]
+    _persona(app, s, "Ana Soto", [
+        {"orden": 1, "elegida_texto": p1["correcta_texto"], "correcta_texto": p1["correcta_texto"], "acerto": True},
+        {"orden": 2, "elegida_texto": p2["mala_texto"], "correcta_texto": p2["correcta_texto"], "acerto": False},
+    ], nota=5.5, porcentaje=50.0)
+
+    _login(client)
+    resp = client.get(f"/evaluaciones/{data['eval_id']}/sesiones/{s}/resultados.csv")
+
+    assert resp.status_code == 200
+    assert resp.mimetype == "text/csv"
+    assert "attachment" in resp.headers["Content-Disposition"]
+    cuerpo = resp.get_data(as_text=True)
+    # Mismas columnas que la tabla, más leyenda.
+    assert "Participante" in cuerpo and "P1" in cuerpo
+    assert "Ana Soto" in cuerpo
+    assert "Reprobado" in cuerpo
+    assert "% de acierto" in cuerpo
+    assert "Leyenda de preguntas" in cuerpo
+
+
+# ===================== Hash solo si no hay nombre =====================
+
+def test_matriz_muestra_hash_solo_si_no_hay_nombre(client, facilitador, app):
+    data = _crear_evaluacion_2preguntas(app, facilitador.id)
+    s = _crear_sesion(app, data["eval_id"], "HASH01")
+    p1 = data["preguntas"][0]
+    r_ok = [{"orden": 1, "elegida_texto": p1["correcta_texto"], "correcta_texto": p1["correcta_texto"], "acerto": True}]
+    _persona(app, s, "Ana Soto", r_ok, nota=6.0, porcentaje=80.0)
+    _persona(app, s, None, r_ok, nota=6.0, porcentaje=80.0)  # sin nombre
+
+    _login(client)
+    cuerpo = client.get(_url(data["eval_id"], s)).get_data(as_text=True)
+
+    assert "(sin nombre)" in cuerpo
+    assert "hash_None" in cuerpo      # el sin-nombre muestra su hash como identificador
+    assert "hash_Ana" not in cuerpo   # la persona con nombre NO muestra su hash

@@ -30,17 +30,18 @@
 <div class="d-flex justify-content-between align-items-start mb-3">
   <div>
     <h1 class="h4 mb-1">Resultados de la sesión</h1>
-    <p class="text-muted mb-0">
-      {{ evaluacion.titulo }} ·
-      sesión <span class="font-monospace">{{ sesion.codigo }}</span> ·
-      umbral {{ sesion.umbral_aprobacion }}%{% if sesion.cerrada_at %} ·
-      cerrada {{ sesion.cerrada_at | hora_local }}{% endif %}
-    </p>
+    <p class="mb-1">{{ evaluacion.titulo }}</p>
+    <ul class="list-unstyled text-muted small mb-0">
+      <li>Sesión: <span class="font-monospace">{{ sesion.codigo }}</span></li>
+      <li>Umbral: {{ sesion.umbral_aprobacion }}%</li>
+      <li>Abierta: {{ sesion.abierta_at | hora_local }}</li>
+      {% if sesion.cerrada_at %}<li>Cerrada: {{ sesion.cerrada_at | hora_local }}</li>{% endif %}
+    </ul>
   </div>
   <div class="no-print text-nowrap">
     <a href="{{ url_for('evaluaciones.informes') }}" class="btn btn-link btn-sm">Ir a Informes →</a>
     {% if matriz %}
-      <a href="{{ url_for('evaluaciones.exportar_csv', eval_id=evaluacion.id, sesion_id=sesion.id) }}"
+      <a href="{{ url_for('evaluaciones.exportar_matriz_csv', eval_id=evaluacion.id, sesion_id=sesion.id) }}"
          class="btn btn-outline-primary btn-sm">Descargar CSV</a>
       <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print();">
         Imprimir / PDF
@@ -92,7 +93,9 @@
               <a href="{{ url_for('evaluaciones.informe_individual', eval_id=evaluacion.id, sesion_id=sesion.id, participante_id=fila.participante_id) }}">
                 {{ fila.nombre }}
               </a>
-              <span class="text-muted small d-block font-monospace">{{ fila.hash_corto }}…</span>
+              {% if fila.nombre == "(sin nombre)" %}
+                <span class="text-muted small d-block font-monospace">{{ fila.hash_corto }}…</span>
+              {% endif %}
             </td>
             {% for celda in fila.celdas %}
               {% if celda.acerto is none %}

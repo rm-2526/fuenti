@@ -431,3 +431,54 @@ def construir_matriz(participantes, columnas_meta, letra_de):
         )
 
     return Matriz(columnas=columnas, filas=filas)
+
+
+def filas_csv_matriz(matriz) -> list[list[str]]:
+    """Filas del CSV que refleja la matriz en pantalla (incluye cabecera).
+
+    Estructura, para que el archivo coincida con la tabla:
+      - Cabecera: Participante, P1..Pn, % de logro, Nota, Estado.
+      - Una fila por participante: en cada Pn, la letra elegida + ✓/✗ (vacío si
+        no respondió); luego % de logro, nota y Aprobado/Reprobado.
+      - Fila "% de acierto" por pregunta.
+      - Leyenda: qué es cada Pn y su alternativa correcta (el CSV es estático,
+        igual que el PDF, así que la leyenda va incluida).
+    """
+    n = len(matriz.columnas)
+    encabezado = (
+        ["Participante"]
+        + [f"P{i + 1}" for i in range(n)]
+        + ["% de logro", "Nota", "Estado"]
+    )
+    filas = [encabezado]
+
+    for f in matriz.filas:
+        celdas = []
+        for c in f.celdas:
+            if c.acerto is None:
+                celdas.append("")
+            else:
+                celdas.append(f"{c.letra} " + ("\u2713" if c.acerto else "\u2717"))
+        estado = "" if f.aprobado is None else ("Aprobado" if f.aprobado else "Reprobado")
+        filas.append(
+            [f.nombre]
+            + celdas
+            + [
+                "" if f.porcentaje is None else f"{f.porcentaje:.1f}",
+                "" if f.nota is None else f"{f.nota:.1f}",
+                estado,
+            ]
+        )
+
+    filas.append(
+        ["% de acierto"]
+        + ["" if c.pct_acierto is None else f"{c.pct_acierto}%" for c in matriz.columnas]
+        + ["", "", ""]
+    )
+
+    filas.append([])
+    filas.append(["Leyenda de preguntas"])
+    for i, c in enumerate(matriz.columnas):
+        filas.append([f"P{i + 1}", c.enunciado, f"correcta: {c.correcta_letra}"])
+
+    return filas

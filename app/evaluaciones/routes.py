@@ -30,6 +30,7 @@ from app.utils.reporte import (
     construir_matriz,
     desglose_desde_respuestas,
     filas_csv_historial,
+    filas_csv_matriz,
     filas_csv_sesion,
     filas_informe_sesion,
 )
@@ -330,24 +331,18 @@ def informe_individual(eval_id, sesion_id, participante_id):
     )
 
 
-@bp.route("/<int:eval_id>/sesiones/<int:sesion_id>/informe-todos")
-@login_required
-def informe_todos(eval_id, sesion_id):
-    """Informe de la sesión en matriz: participantes en filas, preguntas en
-    columnas. Cada celda muestra la alternativa elegida (letra) y si acertó; con
-    el % de logro y la nota por persona, y el % de acierto por pregunta. Queda
-    lista para imprimir o guardar como un único PDF (en horizontal).
+def _matriz_de_sesion(evaluacion, sesion):
+    """Construye la matriz de resultados de la sesión (o None si nadie finalizó).
 
-    Solo incluye a quienes finalizaron. Mismos guards que el resto: 403 si no es
-    el facilitador dueño, 404 si la sesión no es de esa evaluación.
+    La letra de cada alternativa sale de su orden en la evaluación (1=A, 2=B…);
+    la celda toma el texto elegido de la foto congelada y lo mapea a esa letra.
+    Se comparte entre la vista (HTML) y su exportación a CSV para que muestren
+    exactamente lo mismo.
     """
-    evaluacion = _get_evaluacion_propia(eval_id)
-    sesion = _get_sesion_de_evaluacion(evaluacion, sesion_id)
-
     finalizados = [p for p in _participantes_ordenados(sesion) if p.resultado]
+    if not finalizados:
+        return None
 
-    # Letra por pregunta a partir del orden de sus alternativas (1=A, 2=B…). La
-    # celda toma el texto elegido de la foto congelada y lo mapea a su letra.
     letras = {}
     columnas_meta = []
     for pregunta in sorted(evaluacion.preguntas, key=lambda q: q.orden):
@@ -364,7 +359,24 @@ def informe_todos(eval_id, sesion_id):
     def letra_de(orden, texto):
         return letras.get(orden, {}).get(texto, "·")
 
-    matriz = construir_matriz(finalizados, columnas_meta, letra_de) if finalizados else None
+    return construir_matriz(finalizados, columnas_meta, letra_de)
+
+
+@bp.route("/<int:eval_id>/sesiones/<int:sesion_id>/informe-todos")
+@login_required
+def informe_todos(eval_id, sesion_id):
+    """Informe de la sesión en matriz: participantes en filas, preguntas en
+    columnas. Cada celda muestra la alternativa elegida (letra) y si acertó; con
+    el % de logro y la nota por persona, y el % de acierto por pregunta. Queda
+    lista para imprimir o guardar como un único PDF (en horizontal).
+
+    Solo incluye a quienes finalizaron. Mismos guards que el resto: 403 si no es
+    el facilitador dueño, 404 si la sesión no es de esa evaluación.
+    """
+    evaluacion = _get_evaluacion_propia(eval_id)
+    sesion = _get_sesion_de_evaluacion(evaluacion, sesion_id)
+
+    matriz = _matriz_de_sesion(evaluacion, sesion)
 
     return render_template(
         "evaluaciones/informe_todos.html",
@@ -373,6 +385,34 @@ def informe_todos(eval_id, sesion_id):
         matriz=matriz,
         resumen=_resumen_de_sesion(sesion),
     )
+
+
+@bp.route("/<int:eval_id>/sesiones/<int:sesion_id>/resultados.csv")
+@login_required
+def exportar_matriz_csv(eval_id, sesion_id):
+    """Descarga la matriz de resultados como CSV, con las mismas columnas que la
+    tabla en pantalla (personas en filas, P1..Pn, % de logro, nota, estado) más
+    el % de acierto por pregunta y la leyenda. Mismos guards; 404 si nadie
+    finalizó. Lleva BOM para que Excel muestre bien los acentos y los ✓/✗.
+    """
+    evaluacion = _get_evaluacion_propia(eval_id)
+    sesion = _get_sesion_de_evaluacion(evaluacion, sesion_id)
+
+    matriz = _matriz_de_sesion(evaluacion, sesion)
+    if matriz is None:
+        abort(404)
+
+    buffer = io.StringIO()
+    buffer.write("\ufeff")
+    csv.writer(buffer).writerows(filas_csv_matriz(matriz))
+
+    nombre_archivo = f"resultados_{sesion.codigo}.csv"
+    return Response(
+        buffer.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{nombre_archivo}"'},
+    )
+
 
 def _participantes_historial(hash_id):
     """Instancias (Participante) de una persona en sesiones CERRADAS de
