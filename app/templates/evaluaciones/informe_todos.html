@@ -1,15 +1,17 @@
 {% extends "base.html" %}
 
-{% block title %}Informe de la sesión · Fuenti{% endblock %}
+{% block title %}Resultados de la sesión · Fuenti{% endblock %}
 
 {% block content %}
 {#
-  Informe de la sesión en matriz: participantes en filas, preguntas en columnas.
+  Página de resultados de una sesión cerrada (a la que se llega desde "Ver
+  resultados"). Es la matriz: participantes en filas, preguntas en columnas.
   Cada celda: la letra de la alternativa elegida + ✓/✗ (color por acierto). A la
-  derecha, % de logro y nota por persona; abajo, % de acierto por pregunta.
-  La leyenda mapea Q1, Q2… a su enunciado (imprescindible para el PDF, que es
-  estático). En pantalla, además, el mouse sobre "Qn" muestra la pregunta.
-  Al imprimir se usa orientación horizontal para que quepan las columnas.
+  derecha, % de logro, nota y estado por persona; abajo, % de acierto por
+  pregunta. La leyenda mapea P1, P2… a su enunciado (imprescindible para el PDF,
+  que es estático); en pantalla, además, el mouse sobre "Pn" muestra la pregunta.
+  Solo aparecen quienes finalizaron; si alguien ingresó y no terminó, se avisa
+  con una línea. Al imprimir se usa orientación horizontal.
 #}
 <style>
   .matriz td, .matriz th { text-align: center; vertical-align: middle; }
@@ -25,20 +27,49 @@
   }
 </style>
 
-<div class="d-flex justify-content-between align-items-center mb-3 no-print">
-  <a href="{{ url_for('evaluaciones.detalle_sesion', eval_id=evaluacion.id, sesion_id=sesion.id) }}"
-     class="btn btn-link">← Volver a la sesión</a>
-  <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print();">
-    Imprimir / Guardar como PDF
-  </button>
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h1 class="h4 mb-1">Resultados de la sesión</h1>
+    <p class="text-muted mb-0">
+      {{ evaluacion.titulo }} ·
+      sesión <span class="font-monospace">{{ sesion.codigo }}</span> ·
+      umbral {{ sesion.umbral_aprobacion }}%{% if sesion.cerrada_at %} ·
+      cerrada {{ sesion.cerrada_at | hora_local }}{% endif %}
+    </p>
+  </div>
+  <div class="no-print text-nowrap">
+    <a href="{{ url_for('evaluaciones.informes') }}" class="btn btn-link btn-sm">Ir a Informes →</a>
+    {% if matriz %}
+      <a href="{{ url_for('evaluaciones.exportar_csv', eval_id=evaluacion.id, sesion_id=sesion.id) }}"
+         class="btn btn-outline-primary btn-sm">Descargar CSV</a>
+      <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print();">
+        Imprimir / PDF
+      </button>
+    {% endif %}
+  </div>
 </div>
 
-<h1 class="h4 mb-1">Resultados de la sesión</h1>
-<p class="text-muted mb-4">
-  {{ evaluacion.titulo }} · sesión <span class="font-monospace">{{ sesion.codigo }}</span>
-</p>
-
 {% if matriz %}
+  {# Tira compacta de estadísticas del grupo. #}
+  <div class="d-flex flex-wrap gap-4 border rounded px-3 py-2 mb-4">
+    <div>
+      <span class="h5 mb-0">{{ "%.1f"|format(resumen.promedio_nota) if resumen.promedio_nota is not none else "—" }}</span>
+      <span class="text-muted small d-block">Promedio de nota</span>
+    </div>
+    <div>
+      <span class="h5 mb-0">{{ resumen.total_finalizados }}</span>
+      <span class="text-muted small d-block">Finalizaron</span>
+    </div>
+    <div>
+      <span class="h5 mb-0 text-success">{{ resumen.aprobados }}</span>
+      <span class="text-muted small d-block">Aprobados</span>
+    </div>
+    <div>
+      <span class="h5 mb-0 text-danger">{{ resumen.reprobados }}</span>
+      <span class="text-muted small d-block">Reprobados</span>
+    </div>
+  </div>
+
   <div class="table-responsive">
     <table class="table table-sm table-bordered matriz align-middle">
       <thead class="table-light">
@@ -51,14 +82,17 @@
           {% endfor %}
           <th class="text-end">% logro</th>
           <th class="text-end">Nota</th>
+          <th>Estado</th>
         </tr>
       </thead>
       <tbody>
         {% for fila in matriz.filas %}
           <tr>
             <td class="nom">
-              {{ fila.nombre }}
-              <span class="text-muted small font-monospace d-block">{{ fila.hash_corto }}…</span>
+              <a href="{{ url_for('evaluaciones.informe_individual', eval_id=evaluacion.id, sesion_id=sesion.id, participante_id=fila.participante_id) }}">
+                {{ fila.nombre }}
+              </a>
+              <span class="text-muted small d-block font-monospace">{{ fila.hash_corto }}…</span>
             </td>
             {% for celda in fila.celdas %}
               {% if celda.acerto is none %}
@@ -75,6 +109,13 @@
             <td class="text-end fw-semibold">
               {{ "%.1f"|format(fila.nota) if fila.nota is not none else "—" }}
             </td>
+            <td>
+              {% if fila.aprobado %}
+                <span class="badge bg-success">Aprobado</span>
+              {% elif fila.aprobado is not none %}
+                <span class="badge bg-danger">Reprobado</span>
+              {% endif %}
+            </td>
           </tr>
         {% endfor %}
       </tbody>
@@ -88,14 +129,21 @@
           {% endfor %}
           <td></td>
           <td></td>
+          <td></td>
         </tr>
       </tfoot>
     </table>
   </div>
 
+  {% if resumen.pendientes %}
+    <p class="text-muted small mb-1">
+      {{ resumen.pendientes }} participante(s) ingresaron y no finalizaron; no aparecen en la tabla.
+    </p>
+  {% endif %}
+
   <p class="text-muted small mb-1">
     La letra es la alternativa que eligió cada uno · ✓ correcta · ✗ incorrecta ·
-    «—» no respondió.
+    «—» no respondió · el nombre enlaza a su informe individual.
   </p>
 
   <div class="small text-muted">

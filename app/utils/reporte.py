@@ -347,11 +347,13 @@ class CeldaMatriz:
 
 @dataclass(frozen=True)
 class FilaMatriz:
+    participante_id: int
     nombre: str
     hash_corto: str
     celdas: list          # CeldaMatriz por columna, en el orden de las columnas
     nota: "float | None"
     porcentaje: "float | None"
+    aprobado: "bool | None"
 
 
 @dataclass(frozen=True)
@@ -402,11 +404,13 @@ def construir_matriz(participantes, columnas_meta, letra_de):
         res = p.resultado
         filas.append(
             FilaMatriz(
+                participante_id=p.id,
                 nombre=p.nombre.strip() if (p.nombre and p.nombre.strip()) else SIN_NOMBRE,
                 hash_corto=_hash_corto(p.identificador_hash),
                 celdas=celdas,
                 nota=res.nota if res else None,
                 porcentaje=res.porcentaje if res else None,
+                aprobado=res.aprobado if res else None,
             )
         )
 

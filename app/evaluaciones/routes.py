@@ -262,6 +262,13 @@ def abrir_sesion(eval_id):
 def detalle_sesion(eval_id, sesion_id):
     evaluacion = _get_evaluacion_propia(eval_id)
     sesion = _get_sesion_de_evaluacion(evaluacion, sesion_id)
+    # Una sesión cerrada ya no se opera: sus resultados viven en la matriz
+    # (informe_todos). Esta pantalla queda para la sesión en vivo (abierta), que
+    # es cuando se necesita el link para invitar, el refresco y cerrar.
+    if sesion.estado != "abierta":
+        return redirect(
+            url_for("evaluaciones.informe_todos", eval_id=eval_id, sesion_id=sesion_id)
+        )
     resumen = _resumen_de_sesion(sesion)
     participantes = filas_informe_sesion(_participantes_ordenados(sesion))
     return render_template(
@@ -364,6 +371,7 @@ def informe_todos(eval_id, sesion_id):
         evaluacion=evaluacion,
         sesion=sesion,
         matriz=matriz,
+        resumen=_resumen_de_sesion(sesion),
     )
 
 def _participantes_historial(hash_id):

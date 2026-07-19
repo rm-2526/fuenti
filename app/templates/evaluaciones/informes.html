@@ -37,7 +37,7 @@
             </td>
             <td>{{ s.umbral_aprobacion }}%</td>
             <td class="text-end">
-              <a href="{{ url_for('evaluaciones.detalle_sesion', eval_id=evaluacion.id, sesion_id=s.id) }}"
+              <a href="{{ url_for('evaluaciones.informe_todos', eval_id=evaluacion.id, sesion_id=s.id) }}"
                  class="btn btn-sm btn-outline-primary">Ver resultados</a>
             </td>
           </tr>

@@ -127,14 +127,14 @@ def test_construir_matriz_celdas_porcentajes_y_no_respondidas():
         return SimpleNamespace(orden=orden, elegida_texto=elegida, acerto=acerto)
 
     ana = SimpleNamespace(
-        nombre="Ana", identificador_hash="hashana0001",
+        id=1, nombre="Ana", identificador_hash="hashana0001",
         respuestas=[_resp(1, "4", True), _resp(2, "rojo", False)],
-        resultado=SimpleNamespace(nota=5.5, porcentaje=50.0),
+        resultado=SimpleNamespace(nota=5.5, porcentaje=50.0, aprobado=False),
     )
     beto = SimpleNamespace(
-        nombre="Beto", identificador_hash="hashbeto002",
+        id=2, nombre="Beto", identificador_hash="hashbeto002",
         respuestas=[_resp(1, "4", True)],  # no respondio Q2
-        resultado=SimpleNamespace(nota=7.0, porcentaje=100.0),
+        resultado=SimpleNamespace(nota=7.0, porcentaje=100.0, aprobado=True),
     )
 
     columnas_meta = [(1, "Dos mas dos", "A"), (2, "Color", "A")]
@@ -148,6 +148,8 @@ def test_construir_matriz_celdas_porcentajes_y_no_respondidas():
     assert m.columnas[1].pct_acierto == 0
 
     fila_ana = m.filas[0]
+    assert fila_ana.participante_id == 1
+    assert fila_ana.aprobado is False
     assert fila_ana.celdas[0].letra == "A" and fila_ana.celdas[0].acerto is True
     assert fila_ana.celdas[1].letra == "B" and fila_ana.celdas[1].acerto is False
     assert fila_ana.nota == 5.5
@@ -208,7 +210,14 @@ def test_informe_todos_matriz_filas_columnas_y_leyenda(client, facilitador, app)
     assert "¿2 + 2?" in cuerpo                # la leyenda trae el enunciado
     assert "% de acierto" in cuerpo           # fila de resumen por pregunta
     assert "\u2713" in cuerpo and "\u2717" in cuerpo  # aciertos y errores marcados
-    assert "A \u2713" in cuerpo               # Ana eligio A (correcta) en Q1
+    assert "A \u2713" in cuerpo               # Ana eligio A (correcta) en P1
+    # Tira de estadisticas del grupo.
+    assert "Promedio de nota" in cuerpo
+    assert "Aprobados" in cuerpo
+    # Estado por persona: Ana reprobo (50%), Beto aprobo (100%).
+    assert "Aprobado" in cuerpo and "Reprobado" in cuerpo
+    # El nombre enlaza al informe individual de esa persona.
+    assert "participantes/" in cuerpo
 
 
 def test_informe_todos_sin_finalizados_muestra_aviso(client, facilitador, app):
@@ -220,3 +229,26 @@ def test_informe_todos_sin_finalizados_muestra_aviso(client, facilitador, app):
     cuerpo = client.get(_url(data["eval_id"], s)).get_data(as_text=True)
     assert "no hay" in cuerpo.lower()
     assert "Solo Pendiente" not in cuerpo
+
+
+# ============ "Ver resultados": la sesión cerrada abre la matriz ============
+
+def test_detalle_sesion_cerrada_redirige_a_la_matriz(client, facilitador, app):
+    """Al entrar a una sesión CERRADA por su URL de detalle, se redirige a la
+    matriz de resultados (informe_todos). detalle_sesion queda para la abierta."""
+    data = _crear_evaluacion_2preguntas(app, facilitador.id)
+    s = _crear_sesion(app, data["eval_id"], "CERR01", estado="cerrada")
+
+    _login(client)
+    resp = client.get(f"/evaluaciones/{data['eval_id']}/sesiones/{s}")
+    assert resp.status_code == 302
+    assert "informe-todos" in resp.headers["Location"]
+
+
+def test_detalle_sesion_abierta_no_redirige(client, facilitador, app):
+    data = _crear_evaluacion_2preguntas(app, facilitador.id)
+    s = _crear_sesion(app, data["eval_id"], "ABRE01", estado="abierta")
+
+    _login(client)
+    resp = client.get(f"/evaluaciones/{data['eval_id']}/sesiones/{s}")
+    assert resp.status_code == 200  # la sesión en vivo se sigue mostrando aquí
