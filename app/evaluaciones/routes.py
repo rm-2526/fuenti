@@ -27,6 +27,7 @@ from app.utils.reporte import (
     ENCABEZADOS_CSV_HISTORIAL,
     agrupar_historial,
     agrupar_personas,
+    construir_matriz,
     desglose_desde_respuestas,
     filas_csv_historial,
     filas_csv_sesion,
@@ -319,6 +320,50 @@ def informe_individual(eval_id, sesion_id, participante_id):
         participante=participante,
         resultado=participante.resultado,
         desglose=desglose,
+    )
+
+
+@bp.route("/<int:eval_id>/sesiones/<int:sesion_id>/informe-todos")
+@login_required
+def informe_todos(eval_id, sesion_id):
+    """Informe de la sesión en matriz: participantes en filas, preguntas en
+    columnas. Cada celda muestra la alternativa elegida (letra) y si acertó; con
+    el % de logro y la nota por persona, y el % de acierto por pregunta. Queda
+    lista para imprimir o guardar como un único PDF (en horizontal).
+
+    Solo incluye a quienes finalizaron. Mismos guards que el resto: 403 si no es
+    el facilitador dueño, 404 si la sesión no es de esa evaluación.
+    """
+    evaluacion = _get_evaluacion_propia(eval_id)
+    sesion = _get_sesion_de_evaluacion(evaluacion, sesion_id)
+
+    finalizados = [p for p in _participantes_ordenados(sesion) if p.resultado]
+
+    # Letra por pregunta a partir del orden de sus alternativas (1=A, 2=B…). La
+    # celda toma el texto elegido de la foto congelada y lo mapea a su letra.
+    letras = {}
+    columnas_meta = []
+    for pregunta in sorted(evaluacion.preguntas, key=lambda q: q.orden):
+        mapa = {}
+        correcta_letra = "·"
+        for alt in pregunta.alternativas:
+            letra = chr(64 + alt.orden)  # 1 -> A, 2 -> B, …
+            mapa[alt.texto] = letra
+            if alt.es_correcta:
+                correcta_letra = letra
+        letras[pregunta.orden] = mapa
+        columnas_meta.append((pregunta.orden, pregunta.enunciado, correcta_letra))
+
+    def letra_de(orden, texto):
+        return letras.get(orden, {}).get(texto, "·")
+
+    matriz = construir_matriz(finalizados, columnas_meta, letra_de) if finalizados else None
+
+    return render_template(
+        "evaluaciones/informe_todos.html",
+        evaluacion=evaluacion,
+        sesion=sesion,
+        matriz=matriz,
     )
 
 def _participantes_historial(hash_id):

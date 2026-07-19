@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}Informe de la sesión · Fuenti{% endblock %}
+
+{% block content %}
+{#
+  Informe de la sesión en matriz: participantes en filas, preguntas en columnas.
+  Cada celda: la letra de la alternativa elegida + ✓/✗ (color por acierto). A la
+  derecha, % de logro y nota por persona; abajo, % de acierto por pregunta.
+  La leyenda mapea Q1, Q2… a su enunciado (imprescindible para el PDF, que es
+  estático). En pantalla, además, el mouse sobre "Qn" muestra la pregunta.
+  Al imprimir se usa orientación horizontal para que quepan las columnas.
+#}
+<style>
+  .matriz td, .matriz th { text-align: center; vertical-align: middle; }
+  .matriz td.nom, .matriz th.nom { text-align: left; white-space: nowrap; }
+  .matriz .cell-ok { background: #d1e7dd; color: #0f5132; font-weight: 600; }
+  .matriz .cell-no { background: #f8d7da; color: #842029; font-weight: 600; }
+  .matriz th.qcol { cursor: help; }
+  @media print {
+    @page { size: landscape; }
+    .navbar { display: none !important; }
+    .no-print { display: none !important; }
+    body { background: #fff !important; }
+  }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-3 no-print">
+  <a href="{{ url_for('evaluaciones.detalle_sesion', eval_id=evaluacion.id, sesion_id=sesion.id) }}"
+     class="btn btn-link">← Volver a la sesión</a>
+  <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print();">
+    Imprimir / Guardar como PDF
+  </button>
+</div>
+
+<h1 class="h4 mb-1">Resultados de la sesión</h1>
+<p class="text-muted mb-4">
+  {{ evaluacion.titulo }} · sesión <span class="font-monospace">{{ sesion.codigo }}</span>
+</p>
+
+{% if matriz %}
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered matriz align-middle">
+      <thead class="table-light">
+        <tr>
+          <th class="nom">Participante</th>
+          {% for col in matriz.columnas %}
+            <th class="qcol" title="{{ col.enunciado }} (correcta: {{ col.correcta_letra }})">
+              P{{ loop.index }}
+            </th>
+          {% endfor %}
+          <th class="text-end">% logro</th>
+          <th class="text-end">Nota</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for fila in matriz.filas %}
+          <tr>
+            <td class="nom">
+              {{ fila.nombre }}
+              <span class="text-muted small font-monospace d-block">{{ fila.hash_corto }}…</span>
+            </td>
+            {% for celda in fila.celdas %}
+              {% if celda.acerto is none %}
+                <td class="text-muted">—</td>
+              {% elif celda.acerto %}
+                <td class="cell-ok">{{ celda.letra }} ✓</td>
+              {% else %}
+                <td class="cell-no">{{ celda.letra }} ✗</td>
+              {% endif %}
+            {% endfor %}
+            <td class="text-end">
+              {{ "%.1f"|format(fila.porcentaje) if fila.porcentaje is not none else "—" }}%
+            </td>
+            <td class="text-end fw-semibold">
+              {{ "%.1f"|format(fila.nota) if fila.nota is not none else "—" }}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot class="table-light">
+        <tr>
+          <td class="nom fw-semibold">% de acierto</td>
+          {% for col in matriz.columnas %}
+            <td {% if col.pct_acierto is not none and col.pct_acierto == 0 %}class="text-danger fw-semibold"{% endif %}>
+              {{ col.pct_acierto ~ "%" if col.pct_acierto is not none else "—" }}
+            </td>
+          {% endfor %}
+          <td></td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <p class="text-muted small mb-1">
+    La letra es la alternativa que eligió cada uno · ✓ correcta · ✗ incorrecta ·
+    «—» no respondió.
+  </p>
+
+  <div class="small text-muted">
+    <p class="fw-semibold mb-1">Preguntas</p>
+    {% for col in matriz.columnas %}
+      <div class="mb-1">
+        <span class="fw-semibold">P{{ loop.index }}.</span>
+        {{ col.enunciado }}
+        <span class="text-success">(correcta: {{ col.correcta_letra }})</span>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="alert alert-info">
+    Ningún participante ha finalizado esta sesión todavía, así que no hay
+    resultados que mostrar.
+  </div>
+{% endif %}
+{% endblock %}

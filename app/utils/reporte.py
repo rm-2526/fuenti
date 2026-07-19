@@ -333,3 +333,97 @@ def agrupar_personas(participantes) -> list[FilaPersona]:
     # Orden: por nombre alfabético; los "(sin nombre)" al final.
     filas.sort(key=lambda f: (f.nombre == SIN_NOMBRE, f.nombre.lower()))
     return filas
+
+# ----------------------------- Matriz de la sesión -----------------------------
+# Vista tipo "libreta de notas": participantes en filas, preguntas en columnas.
+# Cada celda muestra la letra de la alternativa elegida y si acertó. Deja ver de
+# un vistazo qué preguntas costaron (columna) y a quién le fue mal (fila).
+
+@dataclass(frozen=True)
+class CeldaMatriz:
+    letra: str            # letra de la alternativa elegida (A, B, …) o "·"
+    acerto: "bool | None"  # None = no respondió esa pregunta
+
+
+@dataclass(frozen=True)
+class FilaMatriz:
+    nombre: str
+    hash_corto: str
+    celdas: list          # CeldaMatriz por columna, en el orden de las columnas
+    nota: "float | None"
+    porcentaje: "float | None"
+
+
+@dataclass(frozen=True)
+class ColumnaMatriz:
+    orden: int
+    enunciado: str
+    correcta_letra: str
+    pct_acierto: "int | None"  # % de quienes respondieron que acertaron
+
+
+@dataclass(frozen=True)
+class Matriz:
+    columnas: list        # ColumnaMatriz
+    filas: list           # FilaMatriz
+
+
+def construir_matriz(participantes, columnas_meta, letra_de):
+    """Arma la matriz de la sesión.
+
+    Args:
+        participantes: participantes FINALIZADOS (con .resultado), en el orden
+            en que se quieren las filas. Cada uno con .respuestas (foto: .orden,
+            .elegida_texto, .acerto), .nombre, .identificador_hash, .resultado.
+        columnas_meta: lista de (orden, enunciado, correcta_letra), una por
+            pregunta, en el orden de las columnas.
+        letra_de: callable (orden, texto_elegido) -> letra ("A", "B", … o "·").
+
+    Devuelve una Matriz con columnas (incluye % de acierto por pregunta) y filas
+    (incluye nota y % de logro de cada persona). Pura: no toca la BD.
+    """
+    ordenes = [orden for (orden, _enunciado, _correcta) in columnas_meta]
+    aciertos = {orden: 0 for orden in ordenes}
+    respondidas = {orden: 0 for orden in ordenes}
+
+    filas = []
+    for p in participantes:
+        por_orden = {r.orden: r for r in p.respuestas}
+        celdas = []
+        for (orden, _enunciado, _correcta) in columnas_meta:
+            r = por_orden.get(orden)
+            if r is None:
+                celdas.append(CeldaMatriz(letra="", acerto=None))
+                continue
+            celdas.append(CeldaMatriz(letra=letra_de(orden, r.elegida_texto), acerto=r.acerto))
+            respondidas[orden] += 1
+            if r.acerto:
+                aciertos[orden] += 1
+        res = p.resultado
+        filas.append(
+            FilaMatriz(
+                nombre=p.nombre.strip() if (p.nombre and p.nombre.strip()) else SIN_NOMBRE,
+                hash_corto=_hash_corto(p.identificador_hash),
+                celdas=celdas,
+                nota=res.nota if res else None,
+                porcentaje=res.porcentaje if res else None,
+            )
+        )
+
+    columnas = []
+    for (orden, enunciado, correcta_letra) in columnas_meta:
+        pct = (
+            round(100 * aciertos[orden] / respondidas[orden])
+            if respondidas[orden]
+            else None
+        )
+        columnas.append(
+            ColumnaMatriz(
+                orden=orden,
+                enunciado=enunciado,
+                correcta_letra=correcta_letra,
+                pct_acierto=pct,
+            )
+        )
+
+    return Matriz(columnas=columnas, filas=filas)

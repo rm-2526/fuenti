@@ -1,6 +1,18 @@
 {% extends "base.html" %}
 
 {% block content %}
+{#
+  Estilos solo para imprimir: al usar "Imprimir resumen / PDF" se esconden la
+  barra de navegación y los botones/enlaces, para que el acta salga limpia.
+#}
+<style>
+  @media print {
+    .navbar { display: none !important; }
+    .no-print { display: none !important; }
+    body { background: #fff !important; }
+  }
+</style>
+
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h1 class="h3 mb-0">Sesión de "{{ evaluacion.titulo }}"</h1>
   {# Sesion abierta: se vino desde Iniciar, asi que "Volver" es cierto. Se evita
@@ -9,15 +21,25 @@
      Sesion cerrada: NO se dice "Volver a Informes", porque al cerrar la sesion
      el facilitador se queda en esta misma pagina sin haber pasado nunca por
      Informes. Es un destino (donde vivira esto manana), no un regreso. #}
-  {% if sesion.estado == "abierta" %}
-    <a href="{{ url_for('evaluaciones.iniciar') }}" class="btn btn-link">
-      ← Volver
-    </a>
-  {% else %}
-    <a href="{{ url_for('evaluaciones.informes') }}" class="btn btn-link">
-      Ir a Informes →
-    </a>
-  {% endif %}
+  <div class="no-print">
+    {% if sesion.estado == "abierta" %}
+      <a href="{{ url_for('evaluaciones.iniciar') }}" class="btn btn-link">
+        ← Volver
+      </a>
+    {% else %}
+      <a href="{{ url_for('evaluaciones.informes') }}" class="btn btn-link me-2">
+        Ir a Informes →
+      </a>
+      <button type="button" class="btn btn-outline-primary btn-sm"
+              onclick="window.print();">
+        Imprimir resumen / PDF
+      </button>
+      <a href="{{ url_for('evaluaciones.informe_todos', eval_id=evaluacion.id, sesion_id=sesion.id) }}"
+         class="btn btn-outline-primary btn-sm">
+        Resultados por pregunta
+      </a>
+    {% endif %}
+  </div>
 </div>
 
 <div class="card mb-3">
@@ -53,24 +75,28 @@
         {% endif %}
       </div>
 
-      <div class="col-md-6">
-        <p class="mb-1 text-muted">Link para participantes</p>
-        <div class="input-group mb-3">
-          <input type="text"
-                 class="form-control font-monospace"
-                 id="link-participante"
-                 value="{{ url_for('participante.ingreso', codigo=sesion.codigo, _external=True) }}"
-                 readonly>
-          <button class="btn btn-outline-secondary"
-                  type="button"
-                  onclick="document.getElementById('link-participante').select(); document.execCommand('copy');">
-            Copiar
-          </button>
+      {# El link para invitar solo tiene sentido con la sesión abierta: una
+         sesión cerrada no acepta ingresos, así que ahí no se muestra. #}
+      {% if sesion.estado == "abierta" %}
+        <div class="col-md-6">
+          <p class="mb-1 text-muted">Link para participantes</p>
+          <div class="input-group mb-3">
+            <input type="text"
+                   class="form-control font-monospace"
+                   id="link-participante"
+                   value="{{ url_for('participante.ingreso', codigo=sesion.codigo, _external=True) }}"
+                   readonly>
+            <button class="btn btn-outline-secondary"
+                    type="button"
+                    onclick="document.getElementById('link-participante').select(); document.execCommand('copy');">
+              Copiar
+            </button>
+          </div>
+          <p class="text-muted small">
+            Comparte este link con los participantes. Cada uno ingresará con su RUT.
+          </p>
         </div>
-        <p class="text-muted small">
-          Comparte este link con los participantes. Cada uno ingresará con su RUT.
-        </p>
-      </div>
+      {% endif %}
     </div>
   </div>
 </div>
@@ -81,7 +107,7 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h2 class="h4 mb-0">Resultados</h2>
   <a href="{{ url_for('evaluaciones.detalle_sesion', eval_id=evaluacion.id, sesion_id=sesion.id) }}"
-     class="btn btn-outline-secondary btn-sm">Actualizar</a>
+     class="btn btn-outline-secondary btn-sm no-print">Actualizar</a>
 </div>
 
 {# Estado vacío: se muestra cuando todavía nadie finalizó. #}
@@ -166,7 +192,7 @@
   <h2 class="h4 mb-0">Detalle por participante</h2>
   {% if participantes %}
     <a href="{{ url_for('evaluaciones.exportar_csv', eval_id=evaluacion.id, sesion_id=sesion.id) }}"
-       class="btn btn-outline-primary btn-sm">Descargar CSV</a>
+       class="btn btn-outline-primary btn-sm no-print">Descargar CSV</a>
   {% endif %}
 </div>
 
@@ -180,7 +206,7 @@
           <th>Estado</th>
           <th class="text-end">Nota</th>
           <th class="text-end">% de logro</th>
-          <th></th>
+          <th class="no-print"></th>
         </tr>
       </thead>
       <tbody>
@@ -204,7 +230,7 @@
             </td>
             <td class="text-end">{{ "%.1f"|format(p.nota) if p.nota is not none else "—" }}</td>
             <td class="text-end">{{ "%.1f"|format(p.porcentaje) if p.porcentaje is not none else "—" }}%</td>
-            <td class="text-end">
+            <td class="text-end no-print">
               {% if p.finalizado %}
                 <a href="{{ url_for('evaluaciones.informe_individual', eval_id=evaluacion.id, sesion_id=sesion.id, participante_id=p.id) }}"
                    class="btn btn-link btn-sm p-0">Ver informe</a>
