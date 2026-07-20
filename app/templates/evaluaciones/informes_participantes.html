@@ -38,7 +38,6 @@
       <thead>
         <tr>
           <th>Participante</th>
-          <th>Identificador</th>
           <th class="text-end">Sesiones</th>
           <th class="text-end">Historial</th>
         </tr>
@@ -46,8 +45,10 @@
       <tbody>
         {% for persona in personas %}
         <tr>
-          <td>{{ persona.nombre }}</td>
-          <td class="font-monospace text-muted">{{ persona.hash_corto }}…</td>
+          <td>
+            {{ persona.nombre }}
+            <span class="text-muted small d-block font-monospace">{{ persona.hash_corto }}…</span>
+          </td>
           <td class="text-end">{{ persona.n_sesiones }}</td>
           <td class="text-end">
             <a href="{{ url_for('evaluaciones.historial_participante', hash_id=persona.hash_id) }}"

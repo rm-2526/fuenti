@@ -39,7 +39,7 @@
     </ul>
   </div>
   <div class="no-print text-nowrap">
-    <a href="{{ url_for('evaluaciones.informes') }}" class="btn btn-link btn-sm">Ir a Informes →</a>
+    <a href="{{ url_for('evaluaciones.informes') }}" class="btn btn-link btn-sm">Volver a Informes</a>
     {% if matriz %}
       <a href="{{ url_for('evaluaciones.exportar_matriz_csv', eval_id=evaluacion.id, sesion_id=sesion.id) }}"
          class="btn btn-outline-primary btn-sm">Descargar CSV</a>
