@@ -236,6 +236,28 @@ def test_historial_enlaza_al_informe_individual_de_sesiones_finalizadas(
     assert url_pend not in cuerpo    # …y la pendiente no ofrece link.
 
 
+def test_informe_individual_volver_apunta_al_origen(client, facilitador, app):
+    """El botón "Volver" del informe individual respeta de dónde vino el usuario:
+    al historial si se llega con ?volver=historial; a la sesión en cualquier otro
+    caso (matriz de la sesión o sesión en vivo)."""
+    eval_id = _crear_evaluacion(app, facilitador.id, "Induccion")
+    s = _crear_sesion(app, eval_id, "SES123", estado="cerrada")
+    pid = _agregar_persona(app, s, "hash_persona", nombre="Ana Soto", finalizado=True)
+
+    _login(client)
+    base = f"/evaluaciones/{eval_id}/sesiones/{s}/participantes/{pid}/informe"
+
+    # Viniendo del historial: el botón vuelve al historial (y NO a la sesión).
+    desde_hist = client.get(base + "?volver=historial").get_data(as_text=True)
+    assert "Volver al historial" in desde_hist
+    assert "Volver a la sesión" not in desde_hist
+
+    # Sin origen (p. ej. desde la matriz): comportamiento por defecto, a la sesión.
+    por_defecto = client.get(base).get_data(as_text=True)
+    assert "Volver a la sesión" in por_defecto
+    assert "Volver al historial" not in por_defecto
+
+
 # ============ Lista "Por participante" + buscador ============
 
 def test_lista_requiere_login(client, app):

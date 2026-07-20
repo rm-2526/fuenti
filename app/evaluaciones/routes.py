@@ -328,6 +328,10 @@ def informe_individual(eval_id, sesion_id, participante_id):
         participante=participante,
         resultado=participante.resultado,
         desglose=desglose,
+        # De dónde vino el usuario, para que "Volver" apunte al lugar correcto.
+        # Solo "historial" cambia el botón; cualquier otro valor (o ninguno)
+        # mantiene el comportamiento por defecto: volver a la sesión.
+        volver=request.args.get("volver"),
     )
 
 

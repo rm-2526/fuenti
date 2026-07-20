@@ -65,11 +65,11 @@
           </td>
           <td class="no-print">
             {% if f.participante_id %}
-              <a href="{{ url_for('evaluaciones.informe_individual', eval_id=f.eval_id, sesion_id=f.sesion_id, participante_id=f.participante_id) }}"
+              <a href="{{ url_for('evaluaciones.informe_individual', eval_id=f.eval_id, sesion_id=f.sesion_id, participante_id=f.participante_id, volver='historial') }}"
                  class="btn btn-outline-secondary btn-sm"
                  title="Ver informe individual de esta sesión">Ver</a>
             {% else %}
-              <span class="text-muted">—</span>
+              <span class="text-muted">-</span>
             {% endif %}
           </td>
         </tr>
