@@ -248,14 +248,19 @@ def test_informe_individual_volver_apunta_al_origen(client, facilitador, app):
     base = f"/evaluaciones/{eval_id}/sesiones/{s}/participantes/{pid}/informe"
 
     # Viniendo del historial: el botón vuelve al historial (y NO a la sesión).
+    # Además, el botón redundante "Ver historial" NO se muestra (el "Volver"
+    # de la izquierda ya lleva ahí).
     desde_hist = client.get(base + "?volver=historial").get_data(as_text=True)
     assert "Volver al historial" in desde_hist
     assert "Volver a la sesión" not in desde_hist
+    assert "Ver historial" not in desde_hist
 
     # Sin origen (p. ej. desde la matriz): comportamiento por defecto, a la sesión.
+    # Aquí "Ver historial" sí aporta un salto que "Volver a la sesión" no ofrece.
     por_defecto = client.get(base).get_data(as_text=True)
     assert "Volver a la sesión" in por_defecto
     assert "Volver al historial" not in por_defecto
+    assert "Ver historial" in por_defecto
 
 
 # ============ Lista "Por participante" + buscador ============

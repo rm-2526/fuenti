@@ -24,8 +24,13 @@
        class="btn btn-link">← Volver a la sesión</a>
   {% endif %}
   <div>
-    <a href="{{ url_for('evaluaciones.historial_participante', hash_id=participante.identificador_hash) }}"
-       class="btn btn-outline-secondary btn-sm me-2">Ver historial</a>
+    {% if volver != 'historial' %}
+      {# Viniendo del historial, el botón "Volver" de la izquierda ya lleva ahí,
+         así que este "Ver historial" solo se muestra en los otros caminos
+         (matriz de la sesión / sesión en vivo), donde sí aporta un salto nuevo. #}
+      <a href="{{ url_for('evaluaciones.historial_participante', hash_id=participante.identificador_hash) }}"
+         class="btn btn-outline-secondary btn-sm me-2">Ver historial</a>
+    {% endif %}
     <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print();">
       Imprimir / Guardar como PDF
     </button>
