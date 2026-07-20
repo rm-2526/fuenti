@@ -45,7 +45,14 @@
         {% for f in grupo.filas %}
         <tr>
           <td>{{ f.fecha | hora_local }}</td>
-          <td class="font-monospace">{{ f.codigo }}</td>
+          <td class="font-monospace">
+            {% if f.participante_id %}
+              <a href="{{ url_for('evaluaciones.informe_individual', eval_id=f.eval_id, sesion_id=f.sesion_id, participante_id=f.participante_id) }}"
+                 title="Ver informe individual de esta sesión">{{ f.codigo }}</a>
+            {% else %}
+              {{ f.codigo }}
+            {% endif %}
+          </td>
           <td class="text-end">
             {% if f.porcentaje is not none %}{{ "%.1f"|format(f.porcentaje) }}%{% else %}—{% endif %}
           </td>

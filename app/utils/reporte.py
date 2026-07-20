@@ -193,6 +193,12 @@ class FilaHistorial:
     nota: float | None
     umbral: int
     aprobado: bool | None
+    # Llaves para enlazar la fila a su informe individual. Solo se llenan cuando
+    # la persona FINALIZÓ la sesión (hay resultado); si no, quedan en None y la
+    # fila no ofrece link (no hay informe que mostrar). El CSV no las usa.
+    eval_id: int | None = None
+    sesion_id: int | None = None
+    participante_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -224,6 +230,12 @@ def agrupar_historial(resultados_con_contexto) -> list[GrupoHistorial]:
             nota=resultado.nota if resultado else None,
             umbral=sesion.umbral_aprobacion,
             aprobado=resultado.aprobado if resultado else None,
+            # Llaves del informe individual: eval y sesión salen de la sesión;
+            # el participante, del resultado (que las trae). Sin resultado no hay
+            # informe, así que participante_id queda en None y la fila no enlaza.
+            eval_id=sesion.evaluacion_id,
+            sesion_id=sesion.id,
+            participante_id=resultado.participante_id if resultado else None,
         )
         grupos.setdefault(evaluacion_titulo, []).append(fila)
 

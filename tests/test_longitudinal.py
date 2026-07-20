@@ -110,11 +110,14 @@ def test_agrupar_historial_agrupa_por_evaluacion_y_ordena_cronologico():
 
     def _sesion(codigo, fecha):
         return SimpleNamespace(
-            codigo=codigo, cerrada_at=fecha, abierta_at=fecha, umbral_aprobacion=60
+            id=1, evaluacion_id=1,
+            codigo=codigo, cerrada_at=fecha, abierta_at=fecha, umbral_aprobacion=60,
         )
 
     def _res(porcentaje):
-        return SimpleNamespace(porcentaje=porcentaje, nota=5.0, aprobado=True)
+        return SimpleNamespace(
+            participante_id=1, porcentaje=porcentaje, nota=5.0, aprobado=True
+        )
 
     antigua = datetime(2026, 1, 1)
     nueva = datetime(2026, 3, 1)
@@ -131,6 +134,39 @@ def test_agrupar_historial_agrupa_por_evaluacion_y_ordena_cronologico():
     # Dentro de Induccion, cronologico: la antigua antes que la nueva.
     induccion = next(g for g in grupos if g.evaluacion_titulo == "Induccion")
     assert [f.codigo for f in induccion.filas] == ["ANTIGUA", "NUEVA"]
+
+
+def test_agrupar_historial_expone_llaves_del_informe_individual():
+    """Cada fila FINALIZADA trae eval_id/sesion_id/participante_id (para enlazar
+    a su informe individual). Una fila sin resultado no trae participante_id: no
+    hay informe que mostrar, así que la fila no debe ofrecer link."""
+    from types import SimpleNamespace
+
+    from app.utils.reporte import agrupar_historial
+
+    fecha = datetime(2026, 1, 1)
+    sesion_fin = SimpleNamespace(
+        id=7, evaluacion_id=3, codigo="FIN",
+        cerrada_at=fecha, abierta_at=fecha, umbral_aprobacion=60,
+    )
+    sesion_pend = SimpleNamespace(
+        id=8, evaluacion_id=3, codigo="PEND",
+        cerrada_at=fecha, abierta_at=fecha, umbral_aprobacion=60,
+    )
+    res = SimpleNamespace(participante_id=42, porcentaje=90.0, nota=6.0, aprobado=True)
+
+    contexto = [
+        ("Induccion", sesion_fin, res),
+        ("Induccion", sesion_pend, None),   # ingresó pero no finalizó
+    ]
+    por_codigo = {f.codigo: f for f in agrupar_historial(contexto)[0].filas}
+
+    fin = por_codigo["FIN"]
+    assert (fin.eval_id, fin.sesion_id, fin.participante_id) == (3, 7, 42)
+
+    pend = por_codigo["PEND"]
+    assert pend.participante_id is None          # sin informe -> sin link
+    assert (pend.eval_id, pend.sesion_id) == (3, 8)
 
 
 # ===================== Historial: ruta =====================
@@ -174,6 +210,30 @@ def test_historial_aislado_por_facilitador(client, facilitador, app):
     _login(client)  # facilitador del fixture, dueno de nada de lo anterior
     resp = client.get("/evaluaciones/participante/hash_ajeno/historial")
     assert resp.status_code == 404
+
+
+def test_historial_enlaza_al_informe_individual_de_sesiones_finalizadas(
+    client, facilitador, app
+):
+    """Cada sesión donde la persona FINALIZÓ enlaza a su informe individual;
+    una sesión cerrada donde no finalizó (Pendiente) aparece pero SIN link."""
+    eval_id = _crear_evaluacion(app, facilitador.id, "Induccion")
+    s_fin = _crear_sesion(app, eval_id, "FINSES", estado="cerrada")
+    s_pend = _crear_sesion(app, eval_id, "PENSES", estado="cerrada")
+    h = "hash_persona"
+    pid_fin = _agregar_persona(app, s_fin, h, nombre="Ana Soto", finalizado=True)
+    pid_pend = _agregar_persona(app, s_pend, h, nombre="Ana Soto", finalizado=False)
+
+    _login(client)
+    cuerpo = client.get(
+        f"/evaluaciones/participante/{h}/historial"
+    ).get_data(as_text=True)
+
+    url_fin = f"/evaluaciones/{eval_id}/sesiones/{s_fin}/participantes/{pid_fin}/informe"
+    url_pend = f"/evaluaciones/{eval_id}/sesiones/{s_pend}/participantes/{pid_pend}/informe"
+    assert "PENSES" in cuerpo        # la fila pendiente existe en la tabla…
+    assert url_fin in cuerpo         # …la finalizada enlaza a su informe…
+    assert url_pend not in cuerpo    # …y la pendiente no ofrece link.
 
 
 # ============ Lista "Por participante" + buscador ============
