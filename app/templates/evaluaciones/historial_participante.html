@@ -39,25 +39,19 @@
           <th class="text-end">Nota</th>
           <th class="text-end">Umbral</th>
           <th>Resultado</th>
+          <th class="no-print">Informe</th>
         </tr>
       </thead>
       <tbody>
         {% for f in grupo.filas %}
         <tr>
           <td>{{ f.fecha | hora_local }}</td>
-          <td class="font-monospace">
-            {% if f.participante_id %}
-              <a href="{{ url_for('evaluaciones.informe_individual', eval_id=f.eval_id, sesion_id=f.sesion_id, participante_id=f.participante_id) }}"
-                 title="Ver informe individual de esta sesión">{{ f.codigo }}</a>
-            {% else %}
-              {{ f.codigo }}
-            {% endif %}
+          <td class="font-monospace">{{ f.codigo }}</td>
+          <td class="text-end">
+            {% if f.porcentaje is not none %}{{ "%.1f"|format(f.porcentaje) }}%{% else %}-{% endif %}
           </td>
           <td class="text-end">
-            {% if f.porcentaje is not none %}{{ "%.1f"|format(f.porcentaje) }}%{% else %}—{% endif %}
-          </td>
-          <td class="text-end">
-            {% if f.nota is not none %}{{ "%.1f"|format(f.nota) }}{% else %}—{% endif %}
+            {% if f.nota is not none %}{{ "%.1f"|format(f.nota) }}{% else %}-{% endif %}
           </td>
           <td class="text-end">{{ f.umbral }}%</td>
           <td>
@@ -67,6 +61,15 @@
               <span class="text-success">Aprobado</span>
             {% else %}
               <span class="text-danger">Reprobado</span>
+            {% endif %}
+          </td>
+          <td class="no-print">
+            {% if f.participante_id %}
+              <a href="{{ url_for('evaluaciones.informe_individual', eval_id=f.eval_id, sesion_id=f.sesion_id, participante_id=f.participante_id) }}"
+                 class="btn btn-outline-secondary btn-sm"
+                 title="Ver informe individual de esta sesión">Ver</a>
+            {% else %}
+              <span class="text-muted">—</span>
             {% endif %}
           </td>
         </tr>
