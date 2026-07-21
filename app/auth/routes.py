@@ -24,6 +24,10 @@ def login():
             flash("Credenciales inválidas.", "danger")
             return redirect(url_for("auth.login"))
 
+        if not facilitador.activo:
+            flash("Esta cuenta está desactivada. Contacta a un administrador.", "danger")
+            return redirect(url_for("auth.login"))
+
         login_user(facilitador)
 
         # Protección open-redirect: solo aceptar "next" si es relativo

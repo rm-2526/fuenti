@@ -14,12 +14,13 @@
             <th>Nombre</th>
             <th>Correo</th>
             <th>Rol</th>
-            <th>Creado</th>
+            <th>Estado</th>
+            <th class="text-end">Acciones</th>
           </tr>
         </thead>
         <tbody>
           {% for f in facilitadores %}
-            <tr>
+            <tr class="{{ 'text-muted' if not f.activo }}">
               <td>{{ f.nombre }}</td>
               <td class="font-monospace">{{ f.email }}</td>
               <td>
@@ -29,7 +30,34 @@
                   <span class="text-muted">Facilitador</span>
                 {% endif %}
               </td>
-              <td class="text-muted small">{{ f.created_at | hora_local }}</td>
+              <td>
+                {% if f.activo %}
+                  <span class="badge bg-success">Activo</span>
+                {% else %}
+                  <span class="badge bg-secondary">Inactivo</span>
+                {% endif %}
+              </td>
+              <td class="text-end">
+                <a href="{{ url_for('admin.editar_facilitador', fid=f.id) }}"
+                   class="btn btn-sm btn-outline-secondary">Editar</a>
+                <form method="POST"
+                      action="{{ url_for('admin.cambiar_estado', fid=f.id) }}"
+                      class="d-inline">
+                  {% if f.activo %}
+                    <button type="submit"
+                            class="btn btn-sm btn-outline-danger js-confirmar"
+                            data-confirmar-titulo="Desactivar facilitador"
+                            data-confirmar-mensaje="¿Desactivar a «{{ f.nombre }}»? No podrá iniciar sesión, pero se conservan todas sus evaluaciones e informes. Puedes reactivarlo cuando quieras."
+                            data-confirmar-boton="Desactivar">
+                      Desactivar
+                    </button>
+                  {% else %}
+                    <button type="submit" class="btn btn-sm btn-outline-success">
+                      Reactivar
+                    </button>
+                  {% endif %}
+                </form>
+              </td>
             </tr>
           {% endfor %}
         </tbody>

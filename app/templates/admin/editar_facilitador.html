@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Editar facilitador - Fuenti{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-4">Editar facilitador</h1>
+
+<div class="row">
+  <div class="col-lg-6">
+    <form method="POST">
+      <div class="mb-3">
+        <label for="nombre" class="form-label">Nombre</label>
+        <input type="text" class="form-control" id="nombre" name="nombre"
+               value="{{ facilitador.nombre }}" maxlength="255" required>
+      </div>
+      <div class="mb-3">
+        <label for="email" class="form-label">Correo</label>
+        <input type="email" class="form-control" id="email" name="email"
+               value="{{ facilitador.email }}" maxlength="255" required>
+      </div>
+      <div class="form-check mb-4">
+        <input type="checkbox" class="form-check-input" id="es_admin" name="es_admin"
+               {% if facilitador.es_admin %}checked{% endif %}>
+        <label class="form-check-label" for="es_admin">
+          Es administrador (puede gestionar facilitadores)
+        </label>
+      </div>
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">Guardar cambios</button>
+        <a href="{{ url_for('admin.facilitadores') }}" class="btn btn-link">Cancelar</a>
+      </div>
+    </form>
+    <p class="form-text mt-3">
+      La contraseña no se cambia desde aquí. El estado (activo/inactivo) se
+      gestiona con los botones de la lista de facilitadores.
+    </p>
+  </div>
+</div>
+{% endblock %}

@@ -79,3 +79,96 @@ def facilitadores():
         db.select(Facilitador).order_by(Facilitador.created_at)
     ).all()
     return render_template("admin/facilitadores.html", facilitadores=lista)
+
+
+def _get_facilitador(fid):
+    f = db.session.get(Facilitador, fid)
+    if f is None:
+        abort(404)
+    return f
+
+
+def _admins_activos_count():
+    return db.session.scalar(
+        db.select(db.func.count())
+        .select_from(Facilitador)
+        .where(Facilitador.es_admin.is_(True), Facilitador.activo.is_(True))
+    )
+
+
+def _es_ultimo_admin_activo(f):
+    """True si f es un admin activo y es el único que queda."""
+    return f.es_admin and f.activo and _admins_activos_count() <= 1
+
+
+@bp.route("/facilitadores/<int:fid>/editar", methods=["GET", "POST"])
+@admin_required
+def editar_facilitador(fid):
+    f = _get_facilitador(fid)
+
+    if request.method == "POST":
+        nombre = request.form.get("nombre", "").strip()
+        email = request.form.get("email", "").strip().lower()
+        es_admin = request.form.get("es_admin") == "on"
+
+        errores = []
+        if not email or "@" not in email:
+            errores.append("El correo no es válido.")
+        if not nombre:
+            errores.append("El nombre es obligatorio.")
+
+        # Correo único: puede ser el mismo de f, pero no el de OTRO facilitador.
+        if not errores:
+            otro = db.session.scalar(
+                db.select(Facilitador).where(
+                    Facilitador.email == email, Facilitador.id != f.id
+                )
+            )
+            if otro is not None:
+                errores.append("Ya existe otro facilitador con ese correo.")
+
+        # No dejar al sistema sin administradores: no se puede quitar el rol admin
+        # al último admin activo.
+        if not es_admin and _es_ultimo_admin_activo(f):
+            errores.append(
+                "No puedes quitar el rol de administrador al último admin activo."
+            )
+
+        if errores:
+            for e in errores:
+                flash(e, "danger")
+        else:
+            f.nombre = nombre
+            f.email = email
+            f.es_admin = es_admin
+            db.session.commit()
+            flash("Facilitador actualizado.", "success")
+            return redirect(url_for("admin.facilitadores"))
+
+    return render_template("admin/editar_facilitador.html", facilitador=f)
+
+
+@bp.route("/facilitadores/<int:fid>/estado", methods=["POST"])
+@admin_required
+def cambiar_estado(fid):
+    f = _get_facilitador(fid)
+
+    if f.activo:  # se está intentando DESACTIVAR
+        if f.id == current_user.id:
+            flash("No puedes desactivar tu propia cuenta.", "danger")
+            return redirect(url_for("admin.facilitadores"))
+        if _es_ultimo_admin_activo(f):
+            flash("No puedes desactivar al último administrador activo.", "danger")
+            return redirect(url_for("admin.facilitadores"))
+        f.activo = False
+        db.session.commit()
+        flash(
+            f"Facilitador \"{f.email}\" desactivado. Sus datos se conservan.",
+            "success",
+        )
+    else:  # REACTIVAR (siempre permitido)
+        f.activo = True
+        db.session.commit()
+        flash(f"Facilitador \"{f.email}\" reactivado.", "success")
+
+    return redirect(url_for("admin.facilitadores"))

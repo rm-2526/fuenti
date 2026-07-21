@@ -57,7 +57,12 @@ def create_app(config_class: type = Config) -> Flask:
     @login_manager.user_loader
     def load_user(user_id: str):
         from app.models import Facilitador
-        return db.session.get(Facilitador, int(user_id))
+        facilitador = db.session.get(Facilitador, int(user_id))
+        # Un facilitador desactivado deja de estar autenticado de inmediato
+        # (su sesión existente se corta en la siguiente petición).
+        if facilitador is None or not facilitador.activo:
+            return None
+        return facilitador
 
     # Blueprints
     from app.auth import bp as auth_bp

@@ -22,6 +22,10 @@ class Facilitador(UserMixin, db.Model):
     # Administrador: puede acceder al panel de gestión de facilitadores. Los
     # facilitadores normales solo operan sus propias evaluaciones.
     es_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Activo: un facilitador desactivado no puede iniciar sesión y su sesión
+    # existente se corta, pero se conserva TODO lo suyo (evaluaciones, sesiones,
+    # informes). Es un "borrado suave" reversible: no destruye datos.
+    activo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=ahora_utc
     )
