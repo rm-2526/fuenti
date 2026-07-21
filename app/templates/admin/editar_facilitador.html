@@ -25,14 +25,24 @@
           Es administrador (puede gestionar facilitadores)
         </label>
       </div>
+      <div class="mb-4">
+        <label for="password" class="form-label">Nueva contraseña</label>
+        <input type="password" class="form-control" id="password" name="password"
+               minlength="8" autocomplete="new-password"
+               placeholder="Dejar en blanco para no cambiarla">
+        <div class="form-text">
+          Solo se cambia si escribes una nueva (mínimo 8 caracteres). En blanco,
+          la contraseña actual se mantiene.
+        </div>
+      </div>
       <div class="d-flex gap-2">
         <button type="submit" class="btn btn-primary">Guardar cambios</button>
         <a href="{{ url_for('admin.facilitadores') }}" class="btn btn-link">Cancelar</a>
       </div>
     </form>
     <p class="form-text mt-3">
-      La contraseña no se cambia desde aquí. El estado (activo/inactivo) se
-      gestiona con los botones de la lista de facilitadores.
+      El estado (activo/inactivo) se gestiona con los botones de la lista de
+      facilitadores.
     </p>
   </div>
 </div>

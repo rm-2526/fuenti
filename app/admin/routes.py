@@ -110,12 +110,17 @@ def editar_facilitador(fid):
         nombre = request.form.get("nombre", "").strip()
         email = request.form.get("email", "").strip().lower()
         es_admin = request.form.get("es_admin") == "on"
+        password = request.form.get("password", "")
 
         errores = []
         if not email or "@" not in email:
             errores.append("El correo no es válido.")
         if not nombre:
             errores.append("El nombre es obligatorio.")
+        # La contraseña es opcional al editar: en blanco = no se cambia. Si viene
+        # con texto, debe cumplir el mínimo.
+        if password and len(password) < 8:
+            errores.append("La contraseña debe tener al menos 8 caracteres.")
 
         # Correo único: puede ser el mismo de f, pero no el de OTRO facilitador.
         if not errores:
@@ -141,6 +146,8 @@ def editar_facilitador(fid):
             f.nombre = nombre
             f.email = email
             f.es_admin = es_admin
+            if password:  # solo si se escribió una nueva
+                f.set_password(password)
             db.session.commit()
             flash("Facilitador actualizado.", "success")
             return redirect(url_for("admin.facilitadores"))

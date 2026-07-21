@@ -292,3 +292,62 @@ def test_no_admin_no_puede_editar_ni_cambiar_estado(client, app, facilitador):
     _login(client, "facilitador@fuenti.cl", "fuenti2026")  # no es admin
     assert client.get(f"/admin/facilitadores/{otro}/editar").status_code == 403
     assert client.post(f"/admin/facilitadores/{otro}/estado").status_code == 403
+
+
+# ------------------------- Cambio de contraseña (opcional) -------------------------
+
+def test_editar_con_password_nueva_actualiza(client, app):
+    _admin(app)
+    fid = _crear_facilitador(app, "cambia@fuenti.cl", "Cambia", "claveVieja1")
+    _login(client, "admin@fuenti.cl", "adminpass8")
+
+    client.post(
+        f"/admin/facilitadores/{fid}/editar",
+        data={
+            "nombre": "Cambia",
+            "email": "cambia@fuenti.cl",
+            "password": "claveNueva9",
+        },
+        follow_redirects=True,
+    )
+    client.get("/logout")
+    # La nueva funciona…
+    assert _login(client, "cambia@fuenti.cl", "claveNueva9").status_code == 200
+    client.get("/logout")
+    # …y la vieja ya no.
+    r = _login(client, "cambia@fuenti.cl", "claveVieja1")
+    assert "Credenciales inválidas" in r.get_data(as_text=True)
+
+
+def test_editar_sin_password_conserva_la_actual(client, app):
+    _admin(app)
+    fid = _crear_facilitador(app, "igual@fuenti.cl", "Nombre", "claveOriginal1")
+    _login(client, "admin@fuenti.cl", "adminpass8")
+
+    # Se edita el nombre, con el campo de contraseña en blanco.
+    client.post(
+        f"/admin/facilitadores/{fid}/editar",
+        data={"nombre": "Nombre Editado", "email": "igual@fuenti.cl", "password": ""},
+        follow_redirects=True,
+    )
+    with app.app_context():
+        assert db.session.get(Facilitador, fid).nombre == "Nombre Editado"
+    client.get("/logout")
+    # La contraseña original sigue funcionando.
+    assert _login(client, "igual@fuenti.cl", "claveOriginal1").status_code == 200
+
+
+def test_editar_password_corta_no_cambia(client, app):
+    _admin(app)
+    fid = _crear_facilitador(app, "corta2@fuenti.cl", "Corta", "claveBuena1")
+    _login(client, "admin@fuenti.cl", "adminpass8")
+
+    resp = client.post(
+        f"/admin/facilitadores/{fid}/editar",
+        data={"nombre": "Corta", "email": "corta2@fuenti.cl", "password": "123"},
+        follow_redirects=True,
+    )
+    assert "al menos 8 caracteres" in resp.get_data(as_text=True)
+    client.get("/logout")
+    # No se cambió: la original sigue sirviendo.
+    assert _login(client, "corta2@fuenti.cl", "claveBuena1").status_code == 200
