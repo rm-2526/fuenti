@@ -352,8 +352,13 @@ def _matriz_de_sesion(evaluacion, sesion):
     for pregunta in sorted(evaluacion.preguntas, key=lambda q: q.orden):
         mapa = {}
         correcta_letra = "·"
+        es_vf = pregunta.tipo == "verdadero_falso"
         for alt in pregunta.alternativas:
-            letra = chr(64 + alt.orden)  # 1 -> A, 2 -> B, …
+            # V/F muestra V/F (por orden: 1=V, 2=F); opción múltiple, A/B/C…
+            if es_vf:
+                letra = "V" if alt.orden == 1 else "F"
+            else:
+                letra = chr(64 + alt.orden)  # 1 -> A, 2 -> B, …
             mapa[alt.texto] = letra
             if alt.es_correcta:
                 correcta_letra = letra
@@ -678,16 +683,24 @@ def _insertar_preguntas(evaluacion_id, preguntas):
     {enunciado, correcta, alternativas: [(j, texto)]}.
     """
     for orden_p, p in enumerate(preguntas, start=1):
+        tipo = p.get("tipo", "opcion_multiple")
         pregunta = Pregunta(
             evaluacion_id=evaluacion_id,
             enunciado=p["enunciado"],
             orden=orden_p,
+            tipo=tipo,
         )
         db.session.add(pregunta)
         db.session.flush()
 
         correcta_idx = int(p["correcta"])
         for orden_a, (j, texto) in enumerate(p["alternativas"], start=1):
+            # En Verdadero/Falso el texto NO se toma del formulario: se fija por
+            # orden (1=Verdadero, 2=Falso). Así la foto congelada queda correcta
+            # aunque el POST viniera manipulado. La alternativa correcta la sigue
+            # marcando el índice elegido.
+            if tipo == "verdadero_falso":
+                texto = "Verdadero" if orden_a == 1 else "Falso"
             alternativa = Alternativa(
                 pregunta_id=pregunta.id,
                 texto=texto,
@@ -719,6 +732,7 @@ def _preguntas_form_desde_evaluacion(evaluacion):
         form.append(
             {
                 "enunciado": p.enunciado,
+                "tipo": p.tipo,
                 "correcta": str(correcta_pos) if correcta_pos is not None else "",
                 "alternativas": [(i, a.texto) for i, a in enumerate(alts)],
             }
@@ -784,6 +798,10 @@ def _parsear_preguntas(form):
             preguntas_dict[idx] = {
                 "enunciado": value.strip(),
                 "correcta": form.get(f"pregunta_{idx}_correcta", "").strip(),
+                # Tipo de pregunta; por defecto opción múltiple (compatible con
+                # formularios y tests que no envían el campo).
+                "tipo": form.get(f"pregunta_{idx}_tipo", "opcion_multiple").strip()
+                or "opcion_multiple",
                 "alternativas": [],
             }
 
@@ -829,11 +847,23 @@ def _validar(titulo, umbral_str, preguntas):
     for idx, p in enumerate(preguntas, start=1):
         if not p["enunciado"]:
             errores.append(f"La pregunta {idx} no tiene enunciado.")
+
+        tipo = p.get("tipo", "opcion_multiple")
+        if tipo not in ("opcion_multiple", "verdadero_falso"):
+            errores.append(f"La pregunta {idx} tiene un tipo no válido.")
+
         n_alts = len(p["alternativas"])
-        if n_alts < 2:
-            errores.append(f"La pregunta {idx} debe tener al menos 2 alternativas con texto.")
-        if n_alts > 6:
-            errores.append(f"La pregunta {idx} no puede tener más de 6 alternativas.")
+        if tipo == "verdadero_falso":
+            if n_alts != 2:
+                errores.append(
+                    f"La pregunta {idx} (Verdadero/Falso) debe tener "
+                    "exactamente 2 alternativas."
+                )
+        else:
+            if n_alts < 2:
+                errores.append(f"La pregunta {idx} debe tener al menos 2 alternativas con texto.")
+            if n_alts > 6:
+                errores.append(f"La pregunta {idx} no puede tener más de 6 alternativas.")
 
         try:
             correcta_idx = int(p["correcta"])

@@ -59,6 +59,14 @@ class Pregunta(db.Model):
     evaluacion_id: Mapped[int] = mapped_column(ForeignKey("evaluacion.id"), nullable=False)
     enunciado: Mapped[str] = mapped_column(Text, nullable=False)
     orden: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Tipo de pregunta: "opcion_multiple" (2-6 alternativas de texto libre) o
+    # "verdadero_falso" (exactamente 2 alternativas fijas: Verdadero/Falso). No
+    # cambia cómo se califica —ambas se corrigen por la alternativa es_correcta—;
+    # solo afecta la autoría (V/F trae las alternativas ya puestas) y la
+    # presentación (la matriz muestra V/F en vez de A/B).
+    tipo: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="opcion_multiple"
+    )
 
     evaluacion: Mapped["Evaluacion"] = relationship(back_populates="preguntas")
     alternativas: Mapped[list["Alternativa"]] = relationship(

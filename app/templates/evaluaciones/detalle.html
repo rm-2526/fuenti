@@ -21,7 +21,14 @@
   {% for pregunta in evaluacion.preguntas|sort(attribute='orden') %}
     <div class="card mb-3">
       <div class="card-body">
-        <h3 class="h6">Pregunta {{ loop.index }}</h3>
+        <h3 class="h6">
+          Pregunta {{ loop.index }}
+          {% if pregunta.tipo == 'verdadero_falso' %}
+            <span class="badge bg-secondary">Verdadero / Falso</span>
+          {% else %}
+            <span class="badge bg-light text-secondary border">Opción múltiple</span>
+          {% endif %}
+        </h3>
         <p>{{ pregunta.enunciado }}</p>
         <ul class="list-group list-group-flush">
           {% for alt in pregunta.alternativas|sort(attribute='orden') %}

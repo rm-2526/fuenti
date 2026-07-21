@@ -26,10 +26,15 @@
     {% if preguntas_form %}
       {% for p in preguntas_form %}
         {% set pi = loop.index0 %}
-        <div class="card mb-3 pregunta" data-pregunta-idx="{{ pi }}">
+        {% set es_vf = (p.tipo == 'verdadero_falso') %}
+        <div class="card mb-3 pregunta" data-pregunta-idx="{{ pi }}" data-tipo="{{ p.tipo or 'opcion_multiple' }}">
           <div class="card-body">
+            <input type="hidden" name="pregunta_{{ pi }}_tipo" value="{{ p.tipo or 'opcion_multiple' }}">
             <div class="d-flex justify-content-between align-items-center mb-2">
-              <strong>Pregunta {{ loop.index }}</strong>
+              <span>
+                <strong class="pregunta-titulo">Pregunta {{ loop.index }}</strong>
+                {% if es_vf %}<span class="badge bg-secondary ms-1">V/F</span>{% endif %}
+              </span>
               <button type="button" class="btn btn-sm btn-outline-danger btn-quitar-pregunta">
                 Quitar pregunta
               </button>
@@ -50,25 +55,36 @@
                   <input type="text" class="form-control"
                          name="pregunta_{{ pi }}_alternativa_{{ j }}_texto"
                          placeholder="Alternativa" value="{{ texto }}"
-                         maxlength="500" required>
+                         maxlength="500" {% if es_vf %}readonly{% endif %} required>
+                  {% if not es_vf %}
                   <button type="button" class="btn btn-outline-danger btn-quitar-alternativa">
                     ×
                   </button>
+                  {% endif %}
                 </div>
               {% endfor %}
             </div>
+            {% if es_vf %}
+            <div class="form-text">Marca cuál es la afirmación correcta.</div>
+            {% else %}
             <button type="button" class="btn btn-sm btn-outline-primary btn-agregar-alternativa mt-2">
               + Agregar alternativa
             </button>
+            {% endif %}
           </div>
         </div>
       {% endfor %}
     {% endif %}
   </div>
 
-  <button type="button" id="btn-agregar-pregunta" class="btn btn-outline-primary mb-4">
-    + Agregar pregunta
-  </button>
+  <div class="d-flex gap-2 mb-4">
+    <button type="button" id="btn-agregar-pregunta" class="btn btn-outline-primary">
+      + Agregar pregunta
+    </button>
+    <button type="button" id="btn-agregar-pregunta-vf" class="btn btn-outline-primary">
+      + Pregunta Verdadero/Falso
+    </button>
+  </div>
 
   <div class="d-flex gap-2">
     <button type="submit" class="btn btn-primary">{{ boton_guardar | default("Guardar evaluación") }}</button>

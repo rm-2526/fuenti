@@ -59,10 +59,12 @@
     const div = document.createElement("div");
     div.className = "card mb-3 pregunta";
     div.dataset.preguntaIdx = preguntaIdx;
+    div.dataset.tipo = "opcion_multiple";
     div.innerHTML = `
       <div class="card-body">
+        <input type="hidden" name="pregunta_${preguntaIdx}_tipo" value="opcion_multiple">
         <div class="d-flex justify-content-between align-items-center mb-2">
-          <strong>Pregunta</strong>
+          <span><strong class="pregunta-titulo">Pregunta</strong></span>
           <button type="button" class="btn btn-sm btn-outline-danger btn-quitar-pregunta">
             Quitar pregunta
           </button>
@@ -85,8 +87,63 @@
     return div;
   }
 
+  // Alternativa fija (Verdadero/Falso): texto de solo lectura, sin botón de
+  // quitar. El facilitador solo elige cuál es la correcta con el radio.
+  function alternativaVFHtml(preguntaIdx, alternativaIdx, texto) {
+    return `
+      <div class="input-group mb-2 alternativa" data-alternativa-idx="${alternativaIdx}">
+        <div class="input-group-text">
+          <input type="radio"
+                 name="pregunta_${preguntaIdx}_correcta"
+                 value="${alternativaIdx}"
+                 required>
+        </div>
+        <input type="text"
+               class="form-control"
+               name="pregunta_${preguntaIdx}_alternativa_${alternativaIdx}_texto"
+               value="${texto}"
+               maxlength="500"
+               readonly
+               required>
+      </div>
+    `;
+  }
+
+  function crearPreguntaVF(preguntaIdx) {
+    const div = document.createElement("div");
+    div.className = "card mb-3 pregunta";
+    div.dataset.preguntaIdx = preguntaIdx;
+    div.dataset.tipo = "verdadero_falso";
+    div.innerHTML = `
+      <div class="card-body">
+        <input type="hidden" name="pregunta_${preguntaIdx}_tipo" value="verdadero_falso">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span>
+            <strong class="pregunta-titulo">Pregunta</strong>
+            <span class="badge bg-secondary ms-1">V/F</span>
+          </span>
+          <button type="button" class="btn btn-sm btn-outline-danger btn-quitar-pregunta">
+            Quitar pregunta
+          </button>
+        </div>
+        <input type="text"
+               class="form-control mb-3"
+               name="pregunta_${preguntaIdx}_enunciado"
+               placeholder="Enunciado de la pregunta"
+               maxlength="1000"
+               required>
+        <div class="alternativas-container">
+          ${alternativaVFHtml(preguntaIdx, 0, "Verdadero")}
+          ${alternativaVFHtml(preguntaIdx, 1, "Falso")}
+        </div>
+        <div class="form-text">Marca cuál es la afirmación correcta.</div>
+      </div>
+    `;
+    return div;
+  }
+
   function renumerarTitulos() {
-    container.querySelectorAll(".pregunta strong").forEach((el, i) => {
+    container.querySelectorAll(".pregunta-titulo").forEach((el, i) => {
       el.textContent = `Pregunta ${i + 1}`;
     });
   }
@@ -98,6 +155,15 @@
     container.appendChild(crearPregunta(idx));
     renumerarTitulos();
   });
+
+  const btnAgregarPreguntaVF = document.getElementById("btn-agregar-pregunta-vf");
+  if (btnAgregarPreguntaVF) {
+    btnAgregarPreguntaVF.addEventListener("click", () => {
+      const idx = getNextPreguntaIdx();
+      container.appendChild(crearPreguntaVF(idx));
+      renumerarTitulos();
+    });
+  }
 
   container.addEventListener("click", (e) => {
     const t = e.target;
