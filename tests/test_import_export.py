@@ -1,11 +1,11 @@
 """Tests de importación y exportación de evaluaciones en formato JSON.
 
 En la importación, el título y el umbral los ingresa el facilitador en el
-formulario; el archivo JSON aporta solo las preguntas. La validación reutiliza
-las mismas reglas que la creación manual (_validar e _insertar_preguntas).
+formulario; el JSON de las preguntas se pega en un cuadro de texto. La
+validación reutiliza las mismas reglas que la creación manual (_validar e
+_insertar_preguntas).
 """
 
-import io
 import json
 
 from app import db
@@ -68,25 +68,23 @@ def _preguntas():
     ]
 
 
-def _archivo(preguntas=None):
+def _cuerpo(preguntas=None):
     return {"preguntas": _preguntas() if preguntas is None else preguntas}
 
 
-def _subir(client, data, titulo="Importada", umbral="60", filename="eval.json"):
-    """POST del formulario de importación. `data` es un dict (se serializa a
-    JSON), un str o bytes (para probar contenidos malformados)."""
+def _subir(client, data, titulo="Importada", umbral="60"):
+    """POST del formulario de importación, pegando el JSON en el campo de texto.
+    `data` puede ser un dict (se serializa), un str o bytes (para probar
+    contenidos malformados o un archivo exportado)."""
     if isinstance(data, dict):
-        contenido = json.dumps(data).encode("utf-8")
-    elif isinstance(data, str):
-        contenido = data.encode("utf-8")
+        json_texto = json.dumps(data)
+    elif isinstance(data, bytes):
+        json_texto = data.decode("utf-8")
     else:
-        contenido = data
-    campos = {"titulo": titulo, "umbral": umbral,
-              "archivo": (io.BytesIO(contenido), filename)}
+        json_texto = data
     return client.post(
         "/evaluaciones/importar",
-        data=campos,
-        content_type="multipart/form-data",
+        data={"titulo": titulo, "umbral": umbral, "json": json_texto},
         follow_redirects=True,
     )
 
@@ -145,7 +143,7 @@ def test_exportar_estructura_json(client, app, facilitador):
 
 def test_importar_usa_titulo_y_umbral_del_formulario(client, app, facilitador):
     _login(client)
-    resp = _subir(client, _archivo(), titulo="Desde el form", umbral="75")
+    resp = _subir(client, _cuerpo(), titulo="Desde el form", umbral="75")
     assert resp.status_code == 200
     with app.app_context():
         ev = Evaluacion.query.filter_by(titulo="Desde el form").first()
@@ -157,11 +155,11 @@ def test_importar_usa_titulo_y_umbral_del_formulario(client, app, facilitador):
         assert sorted(a.texto for a in vf.alternativas) == ["Falso", "Verdadero"]
 
 
-def test_importar_ignora_titulo_y_umbral_del_archivo(client, app, facilitador):
+def test_importar_ignora_titulo_y_umbral_del_cuerpo(client, app, facilitador):
     """Aunque el archivo traiga título/umbral (p. ej. uno exportado), mandan los
     del formulario."""
     _login(client)
-    data = _archivo()
+    data = _cuerpo()
     data["titulo"] = "IGNORAR"
     data["umbral_aprobacion"] = 5
     data["facilitador_id"] = 9999
@@ -195,23 +193,22 @@ def test_ida_y_vuelta_exportar_importar(client, app, facilitador):
 
 def test_importar_duplicado_no_reemplaza(client, app, facilitador):
     _login(client)
-    _subir(client, _archivo(), titulo="Igual")
-    _subir(client, _archivo(), titulo="Igual")
+    _subir(client, _cuerpo(), titulo="Igual")
+    _subir(client, _cuerpo(), titulo="Igual")
     with app.app_context():
         assert Evaluacion.query.filter_by(titulo="Igual").count() == 2
 
 
 # -------------------- Importar (validación) --------------------
 
-def test_importar_sin_archivo_falla(client, facilitador):
+def test_importar_sin_json_falla(client, facilitador):
     _login(client)
     resp = client.post(
         "/evaluaciones/importar",
-        data={"titulo": "X", "umbral": "60"},
-        content_type="multipart/form-data",
+        data={"titulo": "X", "umbral": "60", "json": "   "},
         follow_redirects=True,
     )
-    assert "elegir un archivo".encode("utf-8") in resp.data
+    assert "pegar el JSON".encode("utf-8") in resp.data
 
 
 def test_importar_json_malformado_falla(client, app, facilitador):
@@ -240,7 +237,7 @@ def test_importar_sin_lista_preguntas_falla(client, app, facilitador):
 
 def test_importar_sin_titulo_falla(client, app, facilitador):
     _login(client)
-    resp = _subir(client, _archivo(), titulo="")
+    resp = _subir(client, _cuerpo(), titulo="")
     assert "título es obligatorio".encode("utf-8") in resp.data
     with app.app_context():
         assert Evaluacion.query.count() == 0
@@ -248,7 +245,7 @@ def test_importar_sin_titulo_falla(client, app, facilitador):
 
 def test_importar_umbral_no_entero_falla(client, app, facilitador):
     _login(client)
-    resp = _subir(client, _archivo(), umbral="sesenta")
+    resp = _subir(client, _cuerpo(), umbral="sesenta")
     assert "umbral debe ser un número entero".encode("utf-8") in resp.data
     with app.app_context():
         assert Evaluacion.query.count() == 0
@@ -256,22 +253,24 @@ def test_importar_umbral_no_entero_falla(client, app, facilitador):
 
 def test_importar_umbral_fuera_de_rango_falla(client, app, facilitador):
     _login(client)
-    resp = _subir(client, _archivo(), umbral="150")
+    resp = _subir(client, _cuerpo(), umbral="150")
     assert "umbral debe estar entre 0 y 100".encode("utf-8") in resp.data
     with app.app_context():
         assert Evaluacion.query.count() == 0
 
 
-def test_importar_error_conserva_titulo_ingresado(client, facilitador):
-    """Si algo falla, el título tecleado se re-muestra en el formulario."""
+def test_importar_error_conserva_titulo_y_texto(client, facilitador):
+    """Si algo falla, el título tecleado y el JSON pegado se re-muestran."""
     _login(client)
-    resp = _subir(client, "json roto", titulo="No lo pierdas")
-    assert b'value="No lo pierdas"' in resp.data
+    resp = _subir(client, "json roto pero identificable", titulo="No lo pierdas")
+    cuerpo = resp.get_data(as_text=True)
+    assert 'value="No lo pierdas"' in cuerpo
+    assert "json roto pero identificable" in cuerpo
 
 
 def test_importar_dos_correctas_falla(client, app, facilitador):
     _login(client)
-    data = _archivo()
+    data = _cuerpo()
     data["preguntas"][0]["alternativas"][1]["es_correcta"] = True
     resp = _subir(client, data)
     assert "exactamente una".encode("utf-8") in resp.data
@@ -281,7 +280,7 @@ def test_importar_dos_correctas_falla(client, app, facilitador):
 
 def test_importar_sin_correcta_falla(client, app, facilitador):
     _login(client)
-    data = _archivo()
+    data = _cuerpo()
     for a in data["preguntas"][0]["alternativas"]:
         a["es_correcta"] = False
     resp = _subir(client, data)
@@ -292,7 +291,7 @@ def test_importar_sin_correcta_falla(client, app, facilitador):
 
 def test_importar_opcion_multiple_una_alternativa_falla(client, app, facilitador):
     _login(client)
-    data = _archivo()
+    data = _cuerpo()
     data["preguntas"][0]["alternativas"] = [{"texto": "Única", "es_correcta": True}]
     resp = _subir(client, data)
     assert "al menos 2 alternativas".encode("utf-8") in resp.data

@@ -192,8 +192,8 @@ def exportar(eval_id):
     )
 
 
-# Tope de tamano del archivo de importacion (2 MB). Una evaluacion de texto
-# jamas se acerca a esto; el limite solo evita cargar un archivo enorme.
+# Tope de tamano del JSON de importacion (2 MB). Una evaluacion de texto jamas
+# se acerca a esto; el limite solo evita procesar un texto enorme pegado.
 _MAX_IMPORT_BYTES = 2_000_000
 
 
@@ -202,48 +202,45 @@ _MAX_IMPORT_BYTES = 2_000_000
 def importar():
     """Crea una evaluacion nueva (a nombre del usuario actual) desde un JSON.
 
-    Importar SIEMPRE agrega: nunca reemplaza ni edita una evaluacion existente,
-    aunque el titulo coincida. La validacion es la misma que la creacion manual
-    (reusa _validar e _insertar_preguntas); ademas valida la forma del JSON.
+    El facilitador pega el JSON de las preguntas en un cuadro de texto e ingresa
+    titulo y umbral en el formulario. Importar SIEMPRE agrega: nunca reemplaza ni
+    edita una evaluacion existente, aunque el titulo coincida. La validacion es la
+    misma que la creacion manual (reusa _validar e _insertar_preguntas); ademas
+    valida la forma del JSON.
     """
     if request.method == "GET":
-        return render_template("evaluaciones/importar.html", titulo="", umbral="60")
+        return render_template(
+            "evaluaciones/importar.html", titulo="", umbral="60", json_texto=""
+        )
 
-    # El titulo y el umbral los define el facilitador aqui; el archivo solo
-    # aporta las preguntas. Si algo falla, se re-muestran para no re-tipearlos.
+    # El titulo y el umbral los define el facilitador aqui; el JSON pegado solo
+    # aporta las preguntas. Si algo falla, se re-muestran (incluido el texto
+    # pegado) para no re-escribirlos.
     titulo = request.form.get("titulo", "").strip()
     umbral_str = request.form.get("umbral", "").strip()
+    json_texto = request.form.get("json", "")
 
     def _re_render():
         return render_template(
-            "evaluaciones/importar.html", titulo=titulo, umbral=umbral_str
+            "evaluaciones/importar.html",
+            titulo=titulo,
+            umbral=umbral_str,
+            json_texto=json_texto,
         )
 
-    archivo = request.files.get("archivo")
-    if archivo is None or not archivo.filename:
-        flash("Debes elegir un archivo .json para importar.", "danger")
+    if not json_texto.strip():
+        flash("Debes pegar el JSON con las preguntas.", "danger")
         return _re_render()
 
-    raw = archivo.read(_MAX_IMPORT_BYTES + 1)
-    if len(raw) > _MAX_IMPORT_BYTES:
-        flash("El archivo es demasiado grande.", "danger")
+    if len(json_texto) > _MAX_IMPORT_BYTES:
+        flash("El texto pegado es demasiado largo.", "danger")
         return _re_render()
 
     try:
-        contenido = raw.decode("utf-8")
-    except UnicodeDecodeError:
-        flash(
-            "No se pudo leer el archivo. Debe ser un archivo de texto JSON "
-            "codificado en UTF-8.",
-            "danger",
-        )
-        return _re_render()
-
-    try:
-        data = json.loads(contenido)
+        data = json.loads(json_texto)
     except json.JSONDecodeError:
         flash(
-            "El archivo no es un JSON válido. Revisa que tenga el formato "
+            "El texto pegado no es un JSON válido. Revisa que tenga el formato "
             "indicado más abajo.",
             "danger",
         )
