@@ -10,26 +10,38 @@
 
 <form method="POST" enctype="multipart/form-data"
       class="card card-body mb-4" style="max-width: 640px;">
-  <label for="archivo" class="form-label">Archivo JSON de la evaluación</label>
-  <input type="file" name="archivo" id="archivo"
-         accept=".json,application/json" class="form-control" required>
-  <div class="form-text mb-3">
-    Se creará una evaluación nueva a tu nombre. Si el título coincide con uno
-    que ya tienes, <strong>no se reemplaza nada</strong>: se agrega una copia
-    nueva, que luego puedes editar o eliminar.
+  <div class="mb-3">
+    <label for="titulo" class="form-label">Título de la evaluación</label>
+    <input type="text" name="titulo" id="titulo" class="form-control"
+           maxlength="255" value="{{ titulo }}" required>
   </div>
-  <button type="submit" class="btn btn-primary align-self-start">
-    Importar
-  </button>
+
+  <div class="mb-3">
+    <label for="umbral" class="form-label">Umbral de aprobación (%)</label>
+    <input type="number" name="umbral" id="umbral" class="form-control"
+           min="0" max="100" value="{{ umbral }}" style="max-width: 160px;" required>
+    <div class="form-text">Porcentaje mínimo para aprobar (0 a 100).</div>
+  </div>
+
+  <div class="mb-3">
+    <label for="archivo" class="form-label">Archivo JSON con las preguntas</label>
+    <input type="file" name="archivo" id="archivo"
+           accept=".json,application/json" class="form-control" required>
+    <div class="form-text">
+      El archivo solo aporta las preguntas; el título y el umbral son los que
+      escribes aquí arriba. Se creará una evaluación nueva a tu nombre: importar
+      siempre agrega, nunca reemplaza (aunque el título coincida con uno que ya
+      tengas).
+    </div>
+  </div>
+
+  <button type="submit" class="btn btn-primary align-self-start">Importar</button>
 </form>
 
 <h2 class="h5">Formato del archivo</h2>
-<p class="mb-2">El archivo debe ser un JSON con esta estructura:</p>
+<p class="mb-2">El archivo debe ser un JSON que contenga solo las preguntas, con
+esta estructura:</p>
 <pre class="bg-light border rounded p-3"><code>{% raw %}{
-  "formato": "fuenti.evaluacion",
-  "version": 1,
-  "titulo": "Seguridad en el laboratorio",
-  "umbral_aprobacion": 60,
   "preguntas": [
     {
       "enunciado": "¿Qué elemento de protección personal es obligatorio?",
@@ -53,30 +65,33 @@
 
 <h2 class="h5">Reglas para que el archivo sea válido</h2>
 <ul>
-  <li><code>titulo</code>: texto obligatorio (hasta 255 caracteres).</li>
-  <li><code>umbral_aprobacion</code>: número entero de 0 a 100.</li>
-  <li><code>preguntas</code>: debe haber al menos una.</li>
+  <li>El <strong>título</strong> y el <strong>umbral</strong> se escriben en el
+    formulario de arriba, no en el archivo.</li>
+  <li>El archivo lleva una lista <code>preguntas</code> con al menos una pregunta.</li>
   <li>Cada pregunta lleva <code>enunciado</code> y un <code>tipo</code>:
     <code>"opcion_multiple"</code> (de 2 a 6 alternativas) o
     <code>"verdadero_falso"</code> (exactamente 2).</li>
   <li>En cada pregunta, <strong>una sola</strong> alternativa tiene
     <code>"es_correcta": true</code>.</li>
-  <li>En las <code>verdadero_falso</code>, el texto lo fija la app por orden
-    (la primera alternativa es "Verdadero" y la segunda "Falso"); lo que
-    importa es el orden y cuál marcas como correcta.</li>
+  <li>En las <code>verdadero_falso</code>, la primera alternativa representa
+    "Verdadero" y la segunda "Falso" (el texto lo fija la app). Marca con
+    <code>"es_correcta": true</code> la que sea la respuesta correcta:
+    puede ser cualquiera de las dos.</li>
 </ul>
 
 <h2 class="h5">¿No tienes un archivo? Genéralo con una IA</h2>
-<p class="mb-2">Copia este texto en cualquier asistente y reemplaza el tema y la
-cantidad de preguntas:</p>
-<pre class="bg-light border rounded p-3"><code>{% raw %}Genera SOLO un archivo JSON válido para importar en la plataforma Fuenti,
-sin texto adicional ni explicaciones, con esta estructura exacta:
-{ "formato": "fuenti.evaluacion", "version": 1, "titulo": "...",
-  "umbral_aprobacion": <entero 0-100>,
-  "preguntas": [ { "enunciado": "...", "tipo": "opcion_multiple" | "verdadero_falso",
-    "alternativas": [ { "texto": "...", "es_correcta": true|false } ] } ] }
+<p class="mb-2">Con el siguiente prompt puedes generar, en cualquier asistente
+(ChatGPT, Claude, Gemini…), un archivo con preguntas de selección múltiple y de
+verdadero/falso. Reemplaza el <strong>tema</strong> (de qué tratan las preguntas)
+y la <strong>cantidad</strong>:</p>
+<pre class="bg-light border rounded p-3"><code>{% raw %}Quiero un conjunto de preguntas para una evaluación.
+Tema: <sobre qué tratan las preguntas>.
+Cantidad: <N> preguntas, combinando preguntas de selección múltiple y de verdadero/falso.
+Responde únicamente con el JSON, sin explicaciones ni texto adicional, con esta estructura:
+{ "preguntas": [ { "enunciado": "...", "tipo": "opcion_multiple" | "verdadero_falso",
+  "alternativas": [ { "texto": "...", "es_correcta": true|false } ] } ] }
 Reglas: cada pregunta debe tener exactamente UNA alternativa con es_correcta=true;
-opcion_multiple lleva de 2 a 6 alternativas; verdadero_falso lleva exactamente 2,
-con la primera "Verdadero" y la segunda "Falso".
-Tema: <TU TEMA>. Cantidad de preguntas: <N>. Idioma: español.{% endraw %}</code></pre>
+opcion_multiple lleva de 2 a 6 alternativas; verdadero_falso lleva exactamente 2
+(la primera representa "Verdadero" y la segunda "Falso"), y marcas como correcta
+la que corresponda. Idioma: español.{% endraw %}</code></pre>
 {% endblock %}

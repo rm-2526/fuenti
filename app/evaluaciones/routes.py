@@ -207,17 +207,27 @@ def importar():
     (reusa _validar e _insertar_preguntas); ademas valida la forma del JSON.
     """
     if request.method == "GET":
-        return render_template("evaluaciones/importar.html")
+        return render_template("evaluaciones/importar.html", titulo="", umbral="60")
+
+    # El titulo y el umbral los define el facilitador aqui; el archivo solo
+    # aporta las preguntas. Si algo falla, se re-muestran para no re-tipearlos.
+    titulo = request.form.get("titulo", "").strip()
+    umbral_str = request.form.get("umbral", "").strip()
+
+    def _re_render():
+        return render_template(
+            "evaluaciones/importar.html", titulo=titulo, umbral=umbral_str
+        )
 
     archivo = request.files.get("archivo")
     if archivo is None or not archivo.filename:
         flash("Debes elegir un archivo .json para importar.", "danger")
-        return render_template("evaluaciones/importar.html")
+        return _re_render()
 
     raw = archivo.read(_MAX_IMPORT_BYTES + 1)
     if len(raw) > _MAX_IMPORT_BYTES:
         flash("El archivo es demasiado grande.", "danger")
-        return render_template("evaluaciones/importar.html")
+        return _re_render()
 
     try:
         contenido = raw.decode("utf-8")
@@ -227,7 +237,7 @@ def importar():
             "codificado en UTF-8.",
             "danger",
         )
-        return render_template("evaluaciones/importar.html")
+        return _re_render()
 
     try:
         data = json.loads(contenido)
@@ -237,15 +247,15 @@ def importar():
             "indicado más abajo.",
             "danger",
         )
-        return render_template("evaluaciones/importar.html")
+        return _re_render()
 
-    titulo, umbral_str, preguntas, errores = _json_a_preguntas(data)
+    preguntas, errores = _json_a_preguntas(data)
     errores = errores + _validar(titulo, umbral_str, preguntas)
 
     if errores:
         for e in errores:
             flash(e, "danger")
-        return render_template("evaluaciones/importar.html")
+        return _re_render()
 
     evaluacion = Evaluacion(
         facilitador_id=current_user.id,
@@ -837,39 +847,23 @@ def _evaluacion_a_dict(evaluacion) -> dict:
 
 
 def _json_a_preguntas(data):
-    """Convierte el JSON de importacion a la estructura interna que consumen
-    _validar e _insertar_preguntas: (titulo, umbral_str, preguntas, errores).
+    """Extrae y valida la FORMA de las preguntas del JSON: (preguntas, errores),
+    en la estructura interna que consumen _validar e _insertar_preguntas.
 
-    Aqui se valida la FORMA del JSON (tipos y estructura, con mensajes claros);
-    las reglas de dominio (rangos, conteos de alternativas) las aplica _validar
-    despues. Asi un archivo importado se valida igual que una evaluacion creada
-    a mano.
+    El titulo y el umbral NO salen del archivo: los ingresa el facilitador en el
+    formulario de importacion. Si el archivo trae 'titulo' o 'umbral_aprobacion'
+    (por ejemplo, uno exportado desde la app), simplemente se ignoran. Las reglas
+    de dominio (rangos, conteos) las aplica _validar despues, igual que en la
+    creacion manual.
     """
     if not isinstance(data, dict):
-        return "", "", [], ["El archivo debe contener un objeto JSON en la raíz."]
+        return [], ["El archivo debe contener un objeto JSON en la raíz."]
 
     errores = []
 
-    titulo = data.get("titulo", "")
-    if not isinstance(titulo, str):
-        errores.append("El campo 'titulo' debe ser texto.")
-        titulo = ""
-    titulo = titulo.strip()
-
-    umbral = data.get("umbral_aprobacion")
-    # bool es subclase de int en Python: excluirlo explicitamente.
-    if isinstance(umbral, bool) or not isinstance(umbral, int):
-        errores.append(
-            "El campo 'umbral_aprobacion' debe ser un número entero de 0 a 100."
-        )
-        umbral_str = ""
-    else:
-        umbral_str = str(umbral)
-
     preguntas_json = data.get("preguntas")
     if not isinstance(preguntas_json, list):
-        errores.append("El campo 'preguntas' debe ser una lista.")
-        return titulo, umbral_str, [], errores
+        return [], ["El archivo debe tener una lista llamada 'preguntas'."]
 
     preguntas = []
     for idx, p in enumerate(preguntas_json, start=1):
@@ -947,7 +941,7 @@ def _json_a_preguntas(data):
             }
         )
 
-    return titulo, umbral_str, preguntas, errores
+    return preguntas, errores
 
 
 def _tiene_sesion_abierta(evaluacion) -> bool:

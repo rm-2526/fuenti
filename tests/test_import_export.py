@@ -1,8 +1,8 @@
 """Tests de importación y exportación de evaluaciones en formato JSON.
 
-Cubren: control de acceso (login y dueño), exportación (estructura del JSON,
-ida y vuelta), e importación (creación a nombre del usuario, validación de la
-forma del JSON y reuso de las reglas de dominio de la creación manual).
+En la importación, el título y el umbral los ingresa el facilitador en el
+formulario; el archivo JSON aporta solo las preguntas. La validación reutiliza
+las mismas reglas que la creación manual (_validar e _insertar_preguntas).
 """
 
 import io
@@ -21,8 +21,8 @@ def _login(client, email="facilitador@fuenti.cl", password="fuenti2026"):
 
 
 def _crear_evaluacion(facilitador_id, titulo="Eval de prueba", umbral=60):
-    """Crea directamente en la base una evaluación con una opción múltiple y
-    una Verdadero/Falso, para tener algo que exportar."""
+    """Crea en la base una evaluación con una opción múltiple y una V/F,
+    para tener algo que exportar."""
     ev = Evaluacion(facilitador_id=facilitador_id, titulo=titulo, umbral_aprobacion=umbral)
     db.session.add(ev)
     db.session.flush()
@@ -46,45 +46,46 @@ def _crear_evaluacion(facilitador_id, titulo="Eval de prueba", umbral=60):
     return ev
 
 
-def _json_valido(titulo="Importada", umbral=60):
-    return {
-        "formato": "fuenti.evaluacion",
-        "version": 1,
-        "titulo": titulo,
-        "umbral_aprobacion": umbral,
-        "preguntas": [
-            {
-                "enunciado": "¿Capital de Chile?",
-                "tipo": "opcion_multiple",
-                "alternativas": [
-                    {"texto": "Santiago", "es_correcta": True},
-                    {"texto": "Lima", "es_correcta": False},
-                ],
-            },
-            {
-                "enunciado": "El agua hierve a 100°C a nivel del mar.",
-                "tipo": "verdadero_falso",
-                "alternativas": [
-                    {"texto": "Verdadero", "es_correcta": True},
-                    {"texto": "Falso", "es_correcta": False},
-                ],
-            },
-        ],
-    }
+def _preguntas():
+    """Dos preguntas válidas: una opción múltiple y una V/F."""
+    return [
+        {
+            "enunciado": "¿Capital de Chile?",
+            "tipo": "opcion_multiple",
+            "alternativas": [
+                {"texto": "Santiago", "es_correcta": True},
+                {"texto": "Lima", "es_correcta": False},
+            ],
+        },
+        {
+            "enunciado": "El agua hierve a 100°C a nivel del mar.",
+            "tipo": "verdadero_falso",
+            "alternativas": [
+                {"texto": "Verdadero", "es_correcta": True},
+                {"texto": "Falso", "es_correcta": False},
+            ],
+        },
+    ]
 
 
-def _subir(client, data, filename="eval.json"):
-    """POST del archivo a /importar. `data` es un dict (se serializa a JSON) o
-    un str/bytes crudo (para probar JSON malformado)."""
+def _archivo(preguntas=None):
+    return {"preguntas": _preguntas() if preguntas is None else preguntas}
+
+
+def _subir(client, data, titulo="Importada", umbral="60", filename="eval.json"):
+    """POST del formulario de importación. `data` es un dict (se serializa a
+    JSON), un str o bytes (para probar contenidos malformados)."""
     if isinstance(data, dict):
         contenido = json.dumps(data).encode("utf-8")
     elif isinstance(data, str):
         contenido = data.encode("utf-8")
     else:
         contenido = data
+    campos = {"titulo": titulo, "umbral": umbral,
+              "archivo": (io.BytesIO(contenido), filename)}
     return client.post(
         "/evaluaciones/importar",
-        data={"archivo": (io.BytesIO(contenido), filename)},
+        data=campos,
         content_type="multipart/form-data",
         follow_redirects=True,
     )
@@ -136,66 +137,66 @@ def test_exportar_estructura_json(client, app, facilitador):
     assert data["umbral_aprobacion"] == 70
     assert len(data["preguntas"]) == 2
     p1 = data["preguntas"][0]
-    assert p1["tipo"] == "opcion_multiple"
     correctas = [a for a in p1["alternativas"] if a["es_correcta"]]
     assert len(correctas) == 1 and correctas[0]["texto"] == "4"
 
 
 # -------------------- Importar (camino feliz) --------------------
 
-def test_importar_crea_evaluacion_a_mi_nombre(client, app, facilitador):
+def test_importar_usa_titulo_y_umbral_del_formulario(client, app, facilitador):
     _login(client)
-    resp = _subir(client, _json_valido(titulo="Nueva importada"))
+    resp = _subir(client, _archivo(), titulo="Desde el form", umbral="75")
     assert resp.status_code == 200
-
     with app.app_context():
-        evs = Evaluacion.query.filter_by(titulo="Nueva importada").all()
-        assert len(evs) == 1
-        ev = evs[0]
+        ev = Evaluacion.query.filter_by(titulo="Desde el form").first()
+        assert ev is not None
         assert ev.facilitador_id == facilitador.id
-        assert ev.umbral_aprobacion == 60
+        assert ev.umbral_aprobacion == 75
         assert len(ev.preguntas) == 2
         vf = next(p for p in ev.preguntas if p.tipo == "verdadero_falso")
-        textos = sorted(a.texto for a in vf.alternativas)
-        assert textos == ["Falso", "Verdadero"]
+        assert sorted(a.texto for a in vf.alternativas) == ["Falso", "Verdadero"]
 
 
-def test_importar_ignora_dueno_del_archivo(client, app, facilitador):
-    """Aunque el archivo traiga un facilitador_id, la evaluación queda a nombre
-    del usuario autenticado."""
+def test_importar_ignora_titulo_y_umbral_del_archivo(client, app, facilitador):
+    """Aunque el archivo traiga título/umbral (p. ej. uno exportado), mandan los
+    del formulario."""
     _login(client)
-    data = _json_valido(titulo="Con dueño falso")
-    data["facilitador_id"] = 9999  # debe ignorarse
-    resp = _subir(client, data)
+    data = _archivo()
+    data["titulo"] = "IGNORAR"
+    data["umbral_aprobacion"] = 5
+    data["facilitador_id"] = 9999
+    resp = _subir(client, data, titulo="El que vale", umbral="80")
     assert resp.status_code == 200
     with app.app_context():
-        ev = Evaluacion.query.filter_by(titulo="Con dueño falso").first()
+        assert Evaluacion.query.filter_by(titulo="IGNORAR").first() is None
+        ev = Evaluacion.query.filter_by(titulo="El que vale").first()
         assert ev is not None
+        assert ev.umbral_aprobacion == 80
         assert ev.facilitador_id == facilitador.id
 
 
 def test_ida_y_vuelta_exportar_importar(client, app, facilitador):
-    """Exportar una evaluación y volver a importar ese mismo archivo produce una
-    segunda evaluación con el mismo contenido."""
+    """Un archivo exportado (que trae título/umbral extra) se importa sin
+    problema; el título de la nueva sale del formulario."""
     _login(client)
     with app.app_context():
-        ev = _crear_evaluacion(facilitador.id, titulo="Round Trip")
+        ev = _crear_evaluacion(facilitador.id, titulo="Original")
         eid = ev.id
     exportado = client.get(f"/evaluaciones/{eid}/exportar.json").get_data()
 
-    resp = _subir(client, exportado)
+    resp = _subir(client, exportado, titulo="Copia importada", umbral="60")
     assert resp.status_code == 200
     with app.app_context():
-        evs = Evaluacion.query.filter_by(titulo="Round Trip").all()
-        assert len(evs) == 2  # la original + la importada
-        for e in evs:
-            assert len(e.preguntas) == 2
+        assert Evaluacion.query.filter_by(titulo="Original").count() == 1
+        copia = Evaluacion.query.filter_by(titulo="Copia importada").first()
+        assert copia is not None
+        assert len(copia.preguntas) == 2
 
 
 def test_importar_duplicado_no_reemplaza(client, app, facilitador):
     _login(client)
-    _subir(client, _json_valido(titulo="Igual"))
-    _subir(client, _json_valido(titulo="Igual"))
+    _subir(client, _archivo(), titulo="Igual")
+    _subir(client, _archivo(), titulo="Igual")
     with app.app_context():
         assert Evaluacion.query.filter_by(titulo="Igual").count() == 2
 
@@ -206,7 +207,7 @@ def test_importar_sin_archivo_falla(client, facilitador):
     _login(client)
     resp = client.post(
         "/evaluaciones/importar",
-        data={},
+        data={"titulo": "X", "umbral": "60"},
         content_type="multipart/form-data",
         follow_redirects=True,
     )
@@ -229,20 +230,49 @@ def test_importar_raiz_no_objeto_falla(client, app, facilitador):
         assert Evaluacion.query.count() == 0
 
 
-def test_importar_umbral_no_entero_falla(client, app, facilitador):
+def test_importar_sin_lista_preguntas_falla(client, app, facilitador):
     _login(client)
-    data = _json_valido()
-    data["umbral_aprobacion"] = "sesenta"
-    resp = _subir(client, data)
-    assert b"umbral_aprobacion" in resp.data
+    resp = _subir(client, {"otra_cosa": 1})
+    assert "lista llamada".encode("utf-8") in resp.data
     with app.app_context():
         assert Evaluacion.query.count() == 0
 
 
+def test_importar_sin_titulo_falla(client, app, facilitador):
+    _login(client)
+    resp = _subir(client, _archivo(), titulo="")
+    assert "título es obligatorio".encode("utf-8") in resp.data
+    with app.app_context():
+        assert Evaluacion.query.count() == 0
+
+
+def test_importar_umbral_no_entero_falla(client, app, facilitador):
+    _login(client)
+    resp = _subir(client, _archivo(), umbral="sesenta")
+    assert "umbral debe ser un número entero".encode("utf-8") in resp.data
+    with app.app_context():
+        assert Evaluacion.query.count() == 0
+
+
+def test_importar_umbral_fuera_de_rango_falla(client, app, facilitador):
+    _login(client)
+    resp = _subir(client, _archivo(), umbral="150")
+    assert "umbral debe estar entre 0 y 100".encode("utf-8") in resp.data
+    with app.app_context():
+        assert Evaluacion.query.count() == 0
+
+
+def test_importar_error_conserva_titulo_ingresado(client, facilitador):
+    """Si algo falla, el título tecleado se re-muestra en el formulario."""
+    _login(client)
+    resp = _subir(client, "json roto", titulo="No lo pierdas")
+    assert b'value="No lo pierdas"' in resp.data
+
+
 def test_importar_dos_correctas_falla(client, app, facilitador):
     _login(client)
-    data = _json_valido()
-    data["preguntas"][0]["alternativas"][1]["es_correcta"] = True  # 2 correctas
+    data = _archivo()
+    data["preguntas"][0]["alternativas"][1]["es_correcta"] = True
     resp = _subir(client, data)
     assert "exactamente una".encode("utf-8") in resp.data
     with app.app_context():
@@ -251,7 +281,7 @@ def test_importar_dos_correctas_falla(client, app, facilitador):
 
 def test_importar_sin_correcta_falla(client, app, facilitador):
     _login(client)
-    data = _json_valido()
+    data = _archivo()
     for a in data["preguntas"][0]["alternativas"]:
         a["es_correcta"] = False
     resp = _subir(client, data)
@@ -262,21 +292,17 @@ def test_importar_sin_correcta_falla(client, app, facilitador):
 
 def test_importar_opcion_multiple_una_alternativa_falla(client, app, facilitador):
     _login(client)
-    data = _json_valido()
-    data["preguntas"][0]["alternativas"] = [
-        {"texto": "Única", "es_correcta": True}
-    ]
+    data = _archivo()
+    data["preguntas"][0]["alternativas"] = [{"texto": "Única", "es_correcta": True}]
     resp = _subir(client, data)
     assert "al menos 2 alternativas".encode("utf-8") in resp.data
     with app.app_context():
         assert Evaluacion.query.count() == 0
 
 
-def test_importar_sin_preguntas_falla(client, app, facilitador):
+def test_importar_preguntas_vacias_falla(client, app, facilitador):
     _login(client)
-    data = _json_valido()
-    data["preguntas"] = []
-    resp = _subir(client, data)
+    resp = _subir(client, {"preguntas": []})
     assert "al menos una pregunta".encode("utf-8") in resp.data
     with app.app_context():
         assert Evaluacion.query.count() == 0
