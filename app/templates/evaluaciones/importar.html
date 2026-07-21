@@ -8,84 +8,91 @@
   </a>
 </div>
 
-<form method="POST" class="card card-body mb-4" style="max-width: 720px;">
-  <div class="mb-3">
-    <label for="titulo" class="form-label">Título de la evaluación</label>
-    <input type="text" name="titulo" id="titulo" class="form-control"
-           maxlength="255" value="{{ titulo }}" required>
+<div class="row g-4">
+  <!-- Izquierda: formulario -->
+  <div class="col-lg-7">
+    <form method="POST" class="card card-body">
+      <div class="mb-3">
+        <label for="titulo" class="form-label">Título de la evaluación</label>
+        <input type="text" name="titulo" id="titulo" class="form-control"
+               maxlength="255" value="{{ titulo }}" required>
+      </div>
+
+      <div class="mb-3">
+        <label for="umbral" class="form-label">Umbral de aprobación (%)</label>
+        <input type="number" name="umbral" id="umbral" class="form-control"
+               min="0" max="100" value="{{ umbral }}" style="max-width: 160px;" required>
+        <div class="form-text">Porcentaje mínimo para aprobar (0 a 100).</div>
+      </div>
+
+      <div class="mb-3">
+        <label for="json" class="form-label">JSON con las preguntas</label>
+        <textarea name="json" id="json" class="form-control font-monospace"
+                  rows="14" spellcheck="false"
+                  placeholder='{ "preguntas": [ ... ] }' required>{{ json_texto }}</textarea>
+        <div class="form-text">
+          Pega aquí el JSON con las preguntas (por ejemplo, el que te generó una
+          IA con el prompt de más abajo). El título y el umbral son los que
+          escribes arriba. Importar siempre agrega una evaluación nueva a tu
+          nombre; nunca reemplaza, aunque el título coincida.
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary align-self-start">Importar</button>
+    </form>
   </div>
 
-  <div class="mb-3">
-    <label for="umbral" class="form-label">Umbral de aprobación (%)</label>
-    <input type="number" name="umbral" id="umbral" class="form-control"
-           min="0" max="100" value="{{ umbral }}" style="max-width: 160px;" required>
-    <div class="form-text">Porcentaje mínimo para aprobar (0 a 100).</div>
-  </div>
-
-  <div class="mb-3">
-    <label for="json" class="form-label">JSON con las preguntas</label>
-    <textarea name="json" id="json" class="form-control font-monospace"
-              rows="12" spellcheck="false"
-              placeholder='{ "preguntas": [ ... ] }' required>{{ json_texto }}</textarea>
-    <div class="form-text">
-      Pega aquí el JSON con las preguntas (por ejemplo, el que te generó una IA
-      con el prompt de más abajo). El título y el umbral son los que escribes
-      arriba. Se creará una evaluación nueva a tu nombre: importar siempre
-      agrega, nunca reemplaza (aunque el título coincida con uno que ya tengas).
-    </div>
-  </div>
-
-  <button type="submit" class="btn btn-primary align-self-start">Importar</button>
-</form>
-
-<h2 class="h5">Formato del JSON</h2>
-<p class="mb-2">El JSON debe contener solo las preguntas, con esta estructura:</p>
-<pre class="bg-light border rounded p-3"><code>{% raw %}{
+  <!-- Derecha: formato y reglas -->
+  <div class="col-lg-5">
+    <h2 class="h5">Formato del JSON</h2>
+    <p class="mb-2">El JSON debe contener solo las preguntas, con esta
+    estructura:</p>
+    <pre class="bg-light border rounded p-3 overflow-auto"><code>{% raw %}{
   "preguntas": [
     {
-      "enunciado": "¿Qué elemento de protección personal es obligatorio?",
+      "enunciado": "¿Capital de Chile?",
       "tipo": "opcion_multiple",
       "alternativas": [
-        { "texto": "Gafas de seguridad", "es_correcta": true },
-        { "texto": "Gorra", "es_correcta": false },
-        { "texto": "Guantes de lana", "es_correcta": false }
+        { "texto": "Santiago", "es_correcta": true },
+        { "texto": "Lima", "es_correcta": false }
       ]
     },
     {
-      "enunciado": "El agua apaga un incendio de origen eléctrico.",
+      "enunciado": "El Sol es una estrella.",
       "tipo": "verdadero_falso",
       "alternativas": [
-        { "texto": "Verdadero", "es_correcta": false },
-        { "texto": "Falso", "es_correcta": true }
+        { "texto": "Verdadero", "es_correcta": true },
+        { "texto": "Falso", "es_correcta": false }
       ]
     }
   ]
 }{% endraw %}</code></pre>
 
-<h2 class="h5">Reglas para que el JSON sea válido</h2>
-<ul>
-  <li>El <strong>título</strong> y el <strong>umbral</strong> se escriben en el
-    formulario de arriba, no en el JSON.</li>
-  <li>El JSON lleva una lista <code>preguntas</code> con al menos una pregunta.</li>
-  <li>Cada pregunta lleva <code>enunciado</code> y un <code>tipo</code>:
-    <code>"opcion_multiple"</code> (de 2 a 6 alternativas) o
-    <code>"verdadero_falso"</code> (exactamente 2).</li>
-  <li>En cada pregunta, <strong>una sola</strong> alternativa tiene
-    <code>"es_correcta": true</code>.</li>
-  <li>En las <code>verdadero_falso</code>, la primera alternativa representa
-    "Verdadero" y la segunda "Falso" (el texto lo fija la app). Marca con
-    <code>"es_correcta": true</code> la que sea la respuesta correcta:
-    puede ser cualquiera de las dos.</li>
-</ul>
+    <h2 class="h5 mt-3">Reglas para que el JSON sea válido</h2>
+    <ul class="mb-0">
+      <li>El <strong>título</strong> y el <strong>umbral</strong> se escriben en
+        el formulario, no en el JSON.</li>
+      <li>El JSON lleva una lista <code>preguntas</code> con al menos una.</li>
+      <li>Cada pregunta lleva <code>enunciado</code> y un <code>tipo</code>:
+        <code>"opcion_multiple"</code> (de 2 a 6 alternativas) o
+        <code>"verdadero_falso"</code> (exactamente 2).</li>
+      <li>En cada pregunta, <strong>una sola</strong> alternativa tiene
+        <code>"es_correcta": true</code>.</li>
+      <li>En las <code>verdadero_falso</code>, la primera alternativa representa
+        "Verdadero" y la segunda "Falso" (el texto lo fija la app). Marca como
+        correcta la que corresponda: puede ser cualquiera de las dos.</li>
+    </ul>
+  </div>
+</div>
 
-<h2 class="h5">¿No tienes las preguntas? Genéralas con una IA</h2>
+<h2 class="h5 mt-4">¿No tienes las preguntas? Genéralas con una IA</h2>
 <p class="mb-2">Con el siguiente prompt puedes generar, en cualquier asistente
 (ChatGPT, Claude, Gemini…), un JSON con preguntas de selección múltiple y de
-verdadero/falso. Reemplaza el <strong>tema</strong> (de qué tratan las preguntas)
-y la <strong>cantidad</strong>, y pega el resultado en el cuadro de arriba:</p>
-<pre class="bg-light border rounded p-3"><code>{% raw %}Quiero un conjunto de preguntas para una evaluación.
-Tema: <sobre qué tratan las preguntas>.
-Cantidad: <N> preguntas, combinando preguntas de selección múltiple y de verdadero/falso.
+verdadero/falso. Reemplaza el tema y la cantidad, y pega el resultado en el
+cuadro de arriba:</p>
+<pre class="bg-light border rounded p-3 overflow-auto"><code>{% raw %}Quiero un conjunto de preguntas para una evaluación.
+Tema: [ingresa el tema; ej: seguridad en el laboratorio].
+Cantidad: [ingresa la cantidad; ej: 5] preguntas, combinando preguntas de selección múltiple y de verdadero/falso.
 Responde únicamente con el JSON, sin explicaciones ni texto adicional, con esta estructura:
 { "preguntas": [ { "enunciado": "...", "tipo": "opcion_multiple" | "verdadero_falso",
   "alternativas": [ { "texto": "...", "es_correcta": true|false } ] } ] }
