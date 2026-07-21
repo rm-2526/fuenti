@@ -34,7 +34,7 @@
           <a class="nav-link text-light me-2" href="{{ url_for('evaluaciones.listado') }}">Biblioteca</a>
           <a class="nav-link text-light me-3" href="{{ url_for('evaluaciones.informes') }}">Informes</a>
           {% if current_user.es_admin %}
-          <a class="nav-link text-light me-3" href="{{ url_for('admin.facilitadores') }}">Admin</a>
+          <a class="nav-link text-light me-3" href="{{ url_for('admin.facilitadores') }}">Facilitadores</a>
           {% endif %}
           <div class="dropdown">
             <button class="btn btn-link p-0 border-0" type="button"
