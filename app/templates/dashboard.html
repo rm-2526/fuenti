@@ -52,5 +52,26 @@
       </div>
     </div>
   </div>
+
+  {# Facilitadores: solo para administradores. Antes vivía en el navbar;
+     al limpiarlo, esta tarjeta es ahora la única vía al panel de admin,
+     así que es importante conservarla. #}
+  {% if current_user.es_admin %}
+  <!-- Facilitadores (solo admin) -->
+  <div class="col-12 col-md-4">
+    <div class="card h-100 border-primary">
+      <div class="card-body d-flex flex-column">
+        <h2 class="h5">Facilitadores</h2>
+        <p class="small flex-grow-1">
+          Administra las cuentas: crear, editar y activar o desactivar facilitadores.
+        </p>
+        <a href="{{ url_for('admin.facilitadores') }}"
+           class="btn btn-primary align-self-start">
+          Gestionar facilitadores
+        </a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}
