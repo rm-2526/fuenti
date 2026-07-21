@@ -3,9 +3,14 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h1 class="h3 mb-0">Biblioteca</h1>
-  <a href="{{ url_for('evaluaciones.nueva') }}" class="btn btn-primary">
-    + Nueva evaluación
-  </a>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('evaluaciones.importar') }}" class="btn btn-outline-primary">
+      Importar
+    </a>
+    <a href="{{ url_for('evaluaciones.nueva') }}" class="btn btn-primary">
+      + Nueva evaluación
+    </a>
+  </div>
 </div>
 
 {% if evaluaciones %}
@@ -30,6 +35,10 @@
           <td>{{ e.umbral_aprobacion }}%</td>
           <td>{{ e.created_at | hora_local }}</td>
           <td class="text-end">
+            <a href="{{ url_for('evaluaciones.exportar', eval_id=e.id) }}"
+               class="btn btn-sm btn-outline-secondary me-1">
+              Exportar
+            </a>
             <form method="POST"
                   action="{{ url_for('evaluaciones.eliminar', eval_id=e.id) }}"
                   class="d-inline">

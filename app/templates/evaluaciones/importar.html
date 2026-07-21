@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Importar evaluación - Fuenti{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3 mb-0">Importar evaluación</h1>
+  <a href="{{ url_for('evaluaciones.listado') }}" class="btn btn-outline-secondary">
+    Volver a la biblioteca
+  </a>
+</div>
+
+<form method="POST" enctype="multipart/form-data"
+      class="card card-body mb-4" style="max-width: 640px;">
+  <label for="archivo" class="form-label">Archivo JSON de la evaluación</label>
+  <input type="file" name="archivo" id="archivo"
+         accept=".json,application/json" class="form-control" required>
+  <div class="form-text mb-3">
+    Se creará una evaluación nueva a tu nombre. Si el título coincide con uno
+    que ya tienes, <strong>no se reemplaza nada</strong>: se agrega una copia
+    nueva, que luego puedes editar o eliminar.
+  </div>
+  <button type="submit" class="btn btn-primary align-self-start">
+    Importar
+  </button>
+</form>
+
+<h2 class="h5">Formato del archivo</h2>
+<p class="mb-2">El archivo debe ser un JSON con esta estructura:</p>
+<pre class="bg-light border rounded p-3"><code>{% raw %}{
+  "formato": "fuenti.evaluacion",
+  "version": 1,
+  "titulo": "Seguridad en el laboratorio",
+  "umbral_aprobacion": 60,
+  "preguntas": [
+    {
+      "enunciado": "¿Qué elemento de protección personal es obligatorio?",
+      "tipo": "opcion_multiple",
+      "alternativas": [
+        { "texto": "Gafas de seguridad", "es_correcta": true },
+        { "texto": "Gorra", "es_correcta": false },
+        { "texto": "Guantes de lana", "es_correcta": false }
+      ]
+    },
+    {
+      "enunciado": "El agua apaga un incendio de origen eléctrico.",
+      "tipo": "verdadero_falso",
+      "alternativas": [
+        { "texto": "Verdadero", "es_correcta": false },
+        { "texto": "Falso", "es_correcta": true }
+      ]
+    }
+  ]
+}{% endraw %}</code></pre>
+
+<h2 class="h5">Reglas para que el archivo sea válido</h2>
+<ul>
+  <li><code>titulo</code>: texto obligatorio (hasta 255 caracteres).</li>
+  <li><code>umbral_aprobacion</code>: número entero de 0 a 100.</li>
+  <li><code>preguntas</code>: debe haber al menos una.</li>
+  <li>Cada pregunta lleva <code>enunciado</code> y un <code>tipo</code>:
+    <code>"opcion_multiple"</code> (de 2 a 6 alternativas) o
+    <code>"verdadero_falso"</code> (exactamente 2).</li>
+  <li>En cada pregunta, <strong>una sola</strong> alternativa tiene
+    <code>"es_correcta": true</code>.</li>
+  <li>En las <code>verdadero_falso</code>, el texto lo fija la app por orden
+    (la primera alternativa es "Verdadero" y la segunda "Falso"); lo que
+    importa es el orden y cuál marcas como correcta.</li>
+</ul>
+
+<h2 class="h5">¿No tienes un archivo? Genéralo con una IA</h2>
+<p class="mb-2">Copia este texto en cualquier asistente y reemplaza el tema y la
+cantidad de preguntas:</p>
+<pre class="bg-light border rounded p-3"><code>{% raw %}Genera SOLO un archivo JSON válido para importar en la plataforma Fuenti,
+sin texto adicional ni explicaciones, con esta estructura exacta:
+{ "formato": "fuenti.evaluacion", "version": 1, "titulo": "...",
+  "umbral_aprobacion": <entero 0-100>,
+  "preguntas": [ { "enunciado": "...", "tipo": "opcion_multiple" | "verdadero_falso",
+    "alternativas": [ { "texto": "...", "es_correcta": true|false } ] } ] }
+Reglas: cada pregunta debe tener exactamente UNA alternativa con es_correcta=true;
+opcion_multiple lleva de 2 a 6 alternativas; verdadero_falso lleva exactamente 2,
+con la primera "Verdadero" y la segunda "Falso".
+Tema: <TU TEMA>. Cantidad de preguntas: <N>. Idioma: español.{% endraw %}</code></pre>
+{% endblock %}

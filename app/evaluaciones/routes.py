@@ -1,6 +1,8 @@
 import csv
 import io
+import json
 import re
+import unicodedata
 from dataclasses import asdict
 
 from flask import (
@@ -166,6 +168,98 @@ def nueva():
         umbral="60",
         preguntas_form=None,
     )
+
+
+@bp.route("/<int:eval_id>/exportar.json")
+@login_required
+def exportar(eval_id):
+    """Descarga una evaluacion propia como archivo JSON.
+
+    El archivo NO incluye dueño ni ids internos: es portable y se puede
+    importar en cualquier cuenta (queda a nombre de quien lo importe).
+    """
+    evaluacion = _get_evaluacion_propia(eval_id)
+    contenido = json.dumps(
+        _evaluacion_a_dict(evaluacion), ensure_ascii=False, indent=2
+    )
+    nombre = _slug(evaluacion.titulo) or "evaluacion"
+    return Response(
+        contenido,
+        mimetype="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="{nombre}.json"'
+        },
+    )
+
+
+# Tope de tamano del archivo de importacion (2 MB). Una evaluacion de texto
+# jamas se acerca a esto; el limite solo evita cargar un archivo enorme.
+_MAX_IMPORT_BYTES = 2_000_000
+
+
+@bp.route("/importar", methods=["GET", "POST"])
+@login_required
+def importar():
+    """Crea una evaluacion nueva (a nombre del usuario actual) desde un JSON.
+
+    Importar SIEMPRE agrega: nunca reemplaza ni edita una evaluacion existente,
+    aunque el titulo coincida. La validacion es la misma que la creacion manual
+    (reusa _validar e _insertar_preguntas); ademas valida la forma del JSON.
+    """
+    if request.method == "GET":
+        return render_template("evaluaciones/importar.html")
+
+    archivo = request.files.get("archivo")
+    if archivo is None or not archivo.filename:
+        flash("Debes elegir un archivo .json para importar.", "danger")
+        return render_template("evaluaciones/importar.html")
+
+    raw = archivo.read(_MAX_IMPORT_BYTES + 1)
+    if len(raw) > _MAX_IMPORT_BYTES:
+        flash("El archivo es demasiado grande.", "danger")
+        return render_template("evaluaciones/importar.html")
+
+    try:
+        contenido = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        flash(
+            "No se pudo leer el archivo. Debe ser un archivo de texto JSON "
+            "codificado en UTF-8.",
+            "danger",
+        )
+        return render_template("evaluaciones/importar.html")
+
+    try:
+        data = json.loads(contenido)
+    except json.JSONDecodeError:
+        flash(
+            "El archivo no es un JSON válido. Revisa que tenga el formato "
+            "indicado más abajo.",
+            "danger",
+        )
+        return render_template("evaluaciones/importar.html")
+
+    titulo, umbral_str, preguntas, errores = _json_a_preguntas(data)
+    errores = errores + _validar(titulo, umbral_str, preguntas)
+
+    if errores:
+        for e in errores:
+            flash(e, "danger")
+        return render_template("evaluaciones/importar.html")
+
+    evaluacion = Evaluacion(
+        facilitador_id=current_user.id,
+        titulo=titulo,
+        umbral_aprobacion=int(umbral_str),
+    )
+    db.session.add(evaluacion)
+    db.session.flush()
+
+    _insertar_preguntas(evaluacion.id, preguntas)
+
+    db.session.commit()
+    flash(f'Evaluación "{titulo}" importada.', "success")
+    return redirect(url_for("evaluaciones.listado"))
 
 
 @bp.route("/<int:eval_id>")
@@ -708,6 +802,152 @@ def _insertar_preguntas(evaluacion_id, preguntas):
                 orden=orden_a,
             )
             db.session.add(alternativa)
+
+
+def _slug(texto: str) -> str:
+    """Convierte un titulo en un nombre de archivo seguro (ascii, sin espacios)."""
+    t = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode("ascii")
+    t = re.sub(r"[^a-zA-Z0-9]+", "-", t).strip("-").lower()
+    return t[:60]
+
+
+def _evaluacion_a_dict(evaluacion) -> dict:
+    """Serializa una evaluacion al formato JSON de exportacion.
+
+    No incluye ids internos ni el dueno: el archivo es portable. El orden de
+    preguntas y alternativas se respeta (la primera V/F sigue siendo Verdadero).
+    """
+    return {
+        "formato": "fuenti.evaluacion",
+        "version": 1,
+        "titulo": evaluacion.titulo,
+        "umbral_aprobacion": evaluacion.umbral_aprobacion,
+        "preguntas": [
+            {
+                "enunciado": p.enunciado,
+                "tipo": p.tipo,
+                "alternativas": [
+                    {"texto": a.texto, "es_correcta": a.es_correcta}
+                    for a in sorted(p.alternativas, key=lambda a: a.orden)
+                ],
+            }
+            for p in sorted(evaluacion.preguntas, key=lambda p: p.orden)
+        ],
+    }
+
+
+def _json_a_preguntas(data):
+    """Convierte el JSON de importacion a la estructura interna que consumen
+    _validar e _insertar_preguntas: (titulo, umbral_str, preguntas, errores).
+
+    Aqui se valida la FORMA del JSON (tipos y estructura, con mensajes claros);
+    las reglas de dominio (rangos, conteos de alternativas) las aplica _validar
+    despues. Asi un archivo importado se valida igual que una evaluacion creada
+    a mano.
+    """
+    if not isinstance(data, dict):
+        return "", "", [], ["El archivo debe contener un objeto JSON en la raíz."]
+
+    errores = []
+
+    titulo = data.get("titulo", "")
+    if not isinstance(titulo, str):
+        errores.append("El campo 'titulo' debe ser texto.")
+        titulo = ""
+    titulo = titulo.strip()
+
+    umbral = data.get("umbral_aprobacion")
+    # bool es subclase de int en Python: excluirlo explicitamente.
+    if isinstance(umbral, bool) or not isinstance(umbral, int):
+        errores.append(
+            "El campo 'umbral_aprobacion' debe ser un número entero de 0 a 100."
+        )
+        umbral_str = ""
+    else:
+        umbral_str = str(umbral)
+
+    preguntas_json = data.get("preguntas")
+    if not isinstance(preguntas_json, list):
+        errores.append("El campo 'preguntas' debe ser una lista.")
+        return titulo, umbral_str, [], errores
+
+    preguntas = []
+    for idx, p in enumerate(preguntas_json, start=1):
+        if not isinstance(p, dict):
+            errores.append(f"La pregunta {idx} debe ser un objeto JSON.")
+            continue
+
+        enunciado = p.get("enunciado", "")
+        if not isinstance(enunciado, str):
+            errores.append(f"La pregunta {idx}: 'enunciado' debe ser texto.")
+            enunciado = ""
+
+        tipo = p.get("tipo", "opcion_multiple")
+        if not isinstance(tipo, str) or not tipo.strip():
+            tipo = "opcion_multiple"
+        tipo = tipo.strip()
+
+        alts_json = p.get("alternativas")
+        if not isinstance(alts_json, list):
+            errores.append(f"La pregunta {idx}: 'alternativas' debe ser una lista.")
+            alts_json = []
+
+        pares = []  # (texto, es_correcta)
+        for k, a in enumerate(alts_json, start=1):
+            if not isinstance(a, dict):
+                errores.append(
+                    f"La pregunta {idx}, alternativa {k}: debe ser un objeto JSON."
+                )
+                continue
+            texto = a.get("texto", "")
+            if not isinstance(texto, str):
+                errores.append(
+                    f"La pregunta {idx}, alternativa {k}: 'texto' debe ser texto."
+                )
+                texto = ""
+            es_correcta = a.get("es_correcta", False)
+            if not isinstance(es_correcta, bool):
+                errores.append(
+                    f"La pregunta {idx}, alternativa {k}: "
+                    "'es_correcta' debe ser true o false."
+                )
+                es_correcta = False
+            pares.append((texto.strip(), es_correcta))
+
+        # En opcion multiple, las alternativas sin texto se descartan (igual que
+        # en el formulario). En V/F el texto se ignora (lo fija la app por orden),
+        # asi que no se descarta: deben venir las 2.
+        if tipo == "opcion_multiple":
+            pares = [(t, c) for (t, c) in pares if t]
+
+        alternativas = [(j, t) for j, (t, c) in enumerate(pares)]
+        correctas = [j for j, (t, c) in enumerate(pares) if c]
+
+        if len(correctas) == 1:
+            correcta = str(correctas[0])
+        elif not correctas:
+            errores.append(
+                f"La pregunta {idx}: debe haber exactamente una alternativa con "
+                "es_correcta=true (no hay ninguna)."
+            )
+            correcta = ""
+        else:
+            errores.append(
+                f"La pregunta {idx}: debe haber exactamente una alternativa con "
+                f"es_correcta=true (hay {len(correctas)})."
+            )
+            correcta = ""
+
+        preguntas.append(
+            {
+                "enunciado": enunciado.strip(),
+                "tipo": tipo,
+                "correcta": correcta,
+                "alternativas": alternativas,
+            }
+        )
+
+    return titulo, umbral_str, preguntas, errores
 
 
 def _tiene_sesion_abierta(evaluacion) -> bool:
