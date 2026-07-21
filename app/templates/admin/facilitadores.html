@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Facilitadores - Fuenti{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-4">Facilitadores</h1>
+
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Nombre</th>
+            <th>Correo</th>
+            <th>Rol</th>
+            <th>Creado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in facilitadores %}
+            <tr>
+              <td>{{ f.nombre }}</td>
+              <td class="font-monospace">{{ f.email }}</td>
+              <td>
+                {% if f.es_admin %}
+                  <span class="badge bg-primary">Administrador</span>
+                {% else %}
+                  <span class="text-muted">Facilitador</span>
+                {% endif %}
+              </td>
+              <td class="text-muted small">{{ f.created_at | hora_local }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-body">
+        <h2 class="h5 mb-3">Crear facilitador</h2>
+        <form method="POST">
+          <div class="mb-3">
+            <label for="nombre" class="form-label">Nombre</label>
+            <input type="text" class="form-control" id="nombre" name="nombre"
+                   maxlength="255" required>
+          </div>
+          <div class="mb-3">
+            <label for="email" class="form-label">Correo</label>
+            <input type="email" class="form-control" id="email" name="email"
+                   maxlength="255" required>
+          </div>
+          <div class="mb-3">
+            <label for="password" class="form-label">Contraseña</label>
+            <input type="password" class="form-control" id="password" name="password"
+                   minlength="8" required>
+            <div class="form-text">Mínimo 8 caracteres.</div>
+          </div>
+          <div class="form-check mb-3">
+            <input type="checkbox" class="form-check-input" id="es_admin" name="es_admin">
+            <label class="form-check-label" for="es_admin">
+              Es administrador (puede gestionar facilitadores)
+            </label>
+          </div>
+          <button type="submit" class="btn btn-primary">Crear facilitador</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

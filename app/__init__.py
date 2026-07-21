@@ -69,6 +69,9 @@ def create_app(config_class: type = Config) -> Flask:
     from app.participante import bp as participante_bp
     app.register_blueprint(participante_bp)
 
+    from app.admin import bp as admin_bp
+    app.register_blueprint(admin_bp)
+
     @app.route("/")
     def index():
         return "Hola Fuenti"

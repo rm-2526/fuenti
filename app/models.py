@@ -19,6 +19,9 @@ class Facilitador(UserMixin, db.Model):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     nombre: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Administrador: puede acceder al panel de gestión de facilitadores. Los
+    # facilitadores normales solo operan sus propias evaluaciones.
+    es_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=ahora_utc
     )
