@@ -79,7 +79,7 @@ def create_app(config_class: type = Config) -> Flask:
 
     @app.route("/")
     def index():
-        return "Hola Fuenti"
+        return render_template("index.html")
     
     @app.route("/dashboard")
     @login_required

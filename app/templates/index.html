@@ -1,0 +1,845 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fuenti — evaluaciones para capacitación presencial</title>
+  <meta name="description"
+        content="Fuenti es la plataforma para tomar evaluaciones en capacitaciones presenciales. El facilitador proyecta un código y cada persona entra con su RUT, sin crear cuenta.">
+
+  {# Una sola familia externa (Jost, geometrica y de trazo liviano) y solo tres
+     pesos: es lo que carga el look de la referencia. Todo lo demas usa la
+     tipografia del sistema, que no cuesta ninguna descarga. #}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500&display=swap"
+        rel="stylesheet">
+
+  {# El CSS va embebido a proposito. Es una sola pagina, son ~7 KB, y asi se
+     evita una peticion mas y —sobre todo— el problema de cache de los estaticos
+     que ya conocemos: un <style> nunca queda viejo en el navegador. #}
+  <style>
+    :root {
+      --tinta:      #14161c;   /* titulos */
+      --tinta-2:    #5a6070;   /* texto corrido */
+      --tinta-3:    #8b91a0;   /* apoyos y pies */
+      --linea:      #e8eaef;   /* hairlines */
+      --papel:      #ffffff;
+      --papel-2:    #f7f8fb;   /* seccion alterna */
+      --azul:       #0d6efd;   /* el mismo primary de Bootstrap: al pasar de la
+                                  landing a la app no hay salto de color */
+      --azul-tinte: #eef4ff;
+      --verde:      #1a7f5a;
+      --radio:      14px;
+      --ancho:      1120px;
+      --display:    "Jost", "Segoe UI", system-ui, sans-serif;
+      --texto:      system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --mono:       ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background: var(--papel);
+      color: var(--tinta-2);
+      font-family: var(--texto);
+      font-size: 16px;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .envoltura {
+      max-width: var(--ancho);
+      margin: 0 auto;
+      padding: 0 28px;
+    }
+
+    a { color: inherit; }
+
+    /* Foco visible y consistente en todo lo que se puede tabular. */
+    a:focus-visible,
+    button:focus-visible,
+    input:focus-visible {
+      outline: 2px solid var(--azul);
+      outline-offset: 3px;
+      border-radius: 6px;
+    }
+
+    .oculto-visual {
+      position: absolute;
+      width: 1px; height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+
+    /* ---------------------------------------------------------------- nav */
+
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 84px;
+    }
+
+    .marca {
+      font-family: var(--display);
+      font-weight: 500;
+      font-size: 21px;
+      letter-spacing: -0.01em;
+      color: var(--tinta);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* El isotipo es el cursor de una respuesta marcada: un circulo con el
+       tilde adentro. Es el gesto que hace el participante, no un simbolo
+       generico de "educacion". */
+    .marca svg { display: block; }
+
+    .nav-acciones {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .boton {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-family: var(--texto);
+      font-size: 15px;
+      font-weight: 500;
+      line-height: 1;
+      padding: 13px 24px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background-color .18s ease, border-color .18s ease, color .18s ease;
+    }
+
+    .boton-solido {
+      background: var(--azul);
+      color: #fff;
+    }
+    .boton-solido:hover { background: #0b5ed7; }
+
+    .boton-tenue {
+      background: var(--azul-tinte);
+      color: var(--azul);
+    }
+    .boton-tenue:hover { background: #e2ecff; }
+
+    .boton-plano {
+      background: transparent;
+      color: var(--tinta-2);
+      padding: 13px 14px;
+    }
+    .boton-plano:hover { color: var(--tinta); }
+
+    /* --------------------------------------------------------------- hero */
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.03fr 0.97fr;
+      gap: 72px;
+      align-items: center;
+      padding: 56px 0 104px;
+    }
+
+    .hero h1 {
+      font-family: var(--display);
+      font-weight: 300;
+      font-size: clamp(38px, 5.4vw, 62px);
+      line-height: 1.08;
+      letter-spacing: -0.02em;
+      color: var(--tinta);
+      margin: 0 0 22px;
+    }
+
+    .hero-bajada {
+      font-size: 17.5px;
+      max-width: 46ch;
+      margin: 0 0 34px;
+    }
+
+    /* El campo de codigo es el elemento firma de la pagina: es el objeto real
+       de Fuenti, lo que el facilitador escribe en la pizarra y veinte personas
+       tipean al mismo tiempo. Por eso va en el hero y con cuerpo de display,
+       no escondido en un menu. */
+    .codigo-form {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin: 0 0 14px;
+    }
+
+    .codigo-campo {
+      flex: 1 1 220px;
+      min-width: 0;
+      position: relative;
+    }
+
+    .codigo-input {
+      width: 100%;
+      font-family: var(--mono);
+      font-size: 20px;
+      font-weight: 500;
+      letter-spacing: 0.34em;
+      text-transform: uppercase;
+      color: var(--tinta);
+      background: var(--papel);
+      border: 1px solid var(--linea);
+      border-radius: 999px;
+      padding: 13px 22px;
+      line-height: 1.35;
+      transition: border-color .18s ease, box-shadow .18s ease;
+    }
+    .codigo-input::placeholder {
+      color: #c3c8d4;
+      letter-spacing: 0.34em;
+    }
+    .codigo-input:hover { border-color: #d5d9e2; }
+    .codigo-input:focus {
+      border-color: var(--azul);
+      box-shadow: 0 0 0 4px var(--azul-tinte);
+      outline: none;
+    }
+
+    .pie-campo {
+      font-size: 13.5px;
+      color: var(--tinta-3);
+      margin: 0;
+      max-width: 44ch;
+    }
+
+    .hero-secundario {
+      margin: 26px 0 0;
+      font-size: 14.5px;
+      color: var(--tinta-3);
+    }
+    .hero-secundario a {
+      color: var(--tinta-2);
+      text-decoration-color: var(--linea);
+      text-underline-offset: 3px;
+    }
+    .hero-secundario a:hover { color: var(--azul); }
+
+    /* ------------------------------------------------------- mock del hero */
+
+    .mock {
+      position: relative;
+      aspect-ratio: 1 / 0.92;
+    }
+
+    .mock-deco {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    /* La "proyeccion": el codigo tal como se ve en la sala. La ilustracion y
+       el campo de la izquierda muestran la misma cosa, a proposito. */
+    .pantalla {
+      position: absolute;
+      left: 4%;
+      top: 12%;
+      width: 78%;
+      background: var(--papel);
+      border: 1px solid var(--linea);
+      border-radius: 20px;
+      box-shadow: 0 24px 60px -32px rgba(20, 22, 28, .28);
+      padding: 34px 32px 30px;
+    }
+
+    .pantalla-etiqueta {
+      display: block;
+      font-size: 11.5px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--tinta-3);
+      margin-bottom: 14px;
+    }
+
+    .pantalla-codigo {
+      display: block;
+      font-family: var(--mono);
+      font-size: clamp(30px, 4.4vw, 46px);
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      color: var(--tinta);
+      line-height: 1;
+      margin-bottom: 18px;
+    }
+
+    .pantalla-pie {
+      display: block;
+      font-size: 13.5px;
+      color: var(--tinta-3);
+      border-top: 1px solid var(--linea);
+      padding-top: 14px;
+    }
+
+    .flotante {
+      position: absolute;
+      background: var(--papel);
+      border: 1px solid var(--linea);
+      border-radius: 12px;
+      box-shadow: 0 18px 44px -26px rgba(20, 22, 28, .3);
+      padding: 13px 16px;
+      font-size: 14px;
+      color: var(--tinta);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      white-space: nowrap;
+    }
+
+    .flotante-alternativa { right: 0; top: 2%; }
+    .flotante-nota { left: 12%; bottom: 3%; }
+
+    .marca-ok {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: #e7f5ef;
+      color: var(--verde);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+    }
+
+    .nota-cifra {
+      font-family: var(--mono);
+      font-size: 19px;
+      font-weight: 600;
+      color: var(--verde);
+    }
+    .nota-texto { font-size: 13px; color: var(--tinta-3); }
+
+    /* ------------------------------------------------------- franja escala */
+
+    /* Donde la referencia pone logos de clientes, aca va la escala de notas:
+       es un artefacto real del producto y de Chile, no un adorno prestado. */
+    .franja {
+      border-top: 1px solid var(--linea);
+      border-bottom: 1px solid var(--linea);
+      padding: 34px 0;
+    }
+
+    .escala {
+      display: flex;
+      align-items: center;
+      gap: 26px;
+      flex-wrap: wrap;
+    }
+
+    .escala-barra {
+      flex: 1 1 300px;
+      min-width: 240px;
+      position: relative;
+      height: 46px;
+    }
+
+    .escala-linea {
+      position: absolute;
+      left: 0; right: 0; top: 15px;
+      height: 2px;
+      background: linear-gradient(90deg, #e3e6ec 0%, #cfe0ff 52%, var(--azul) 100%);
+      border-radius: 2px;
+    }
+
+    .escala-hito {
+      position: absolute;
+      top: 0;
+      transform: translateX(-50%);
+      text-align: center;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--tinta-3);
+    }
+    .escala-hito::before {
+      content: "";
+      display: block;
+      width: 2px; height: 10px;
+      background: currentColor;
+      margin: 11px auto 6px;
+      opacity: .55;
+    }
+    .escala-hito-1 { left: 0; transform: translateX(0); text-align: left; }
+    .escala-hito-1::before { margin-left: 0; }
+    .escala-hito-4 { left: 52%; color: var(--azul); font-weight: 600; }
+    .escala-hito-7 { left: 100%; transform: translateX(-100%); text-align: right; }
+    .escala-hito-7::before { margin-right: 0; }
+
+    .escala-nota {
+      flex: 1 1 300px;
+      font-size: 14.5px;
+      color: var(--tinta-3);
+      max-width: 52ch;
+    }
+    .escala-nota strong { color: var(--tinta-2); font-weight: 500; }
+
+    /* ----------------------------------------------------------- secciones */
+
+    .seccion { padding: 96px 0; }
+    .seccion-gris { background: var(--papel-2); }
+
+    .seccion-titulo {
+      font-family: var(--display);
+      font-weight: 300;
+      font-size: clamp(28px, 3.6vw, 42px);
+      line-height: 1.14;
+      letter-spacing: -0.015em;
+      color: var(--tinta);
+      margin: 0 0 16px;
+    }
+
+    .seccion-bajada {
+      font-size: 16.5px;
+      max-width: 52ch;
+      margin: 0;
+    }
+
+    /* Los pasos SI son una secuencia real —no se puede abrir una sesion sin
+       evaluacion, ni responder sin sesion—, asi que el numero informa. */
+    .pasos {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 28px;
+      margin-top: 56px;
+      counter-reset: paso;
+    }
+
+    .paso {
+      border-top: 1px solid var(--linea);
+      padding-top: 22px;
+      counter-increment: paso;
+    }
+    .paso::before {
+      content: counter(paso, decimal-leading-zero);
+      display: block;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      font-weight: 600;
+      letter-spacing: .1em;
+      color: var(--azul);
+      margin-bottom: 12px;
+    }
+    .paso h3 {
+      font-family: var(--display);
+      font-weight: 400;
+      font-size: 20px;
+      color: var(--tinta);
+      margin: 0 0 8px;
+    }
+    .paso p { margin: 0; font-size: 15px; }
+
+    /* Grilla escalonada, como la referencia: tarjetas a la izquierda y un
+       bloque de texto a la derecha. */
+    .split {
+      display: grid;
+      grid-template-columns: 1fr 0.92fr;
+      gap: 72px;
+      align-items: center;
+    }
+
+    .tarjetas {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    .tarjeta {
+      background: var(--papel);
+      border: 1px solid var(--linea);
+      border-radius: var(--radio);
+      padding: 26px 24px;
+    }
+    .tarjeta-alta { margin-top: 34px; }
+
+    .tarjeta-icono {
+      width: 38px; height: 38px;
+      border-radius: 10px;
+      background: var(--azul-tinte);
+      color: var(--azul);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+
+    .tarjeta h3 {
+      font-family: var(--display);
+      font-weight: 400;
+      font-size: 17.5px;
+      color: var(--tinta);
+      margin: 0 0 8px;
+      line-height: 1.3;
+    }
+    .tarjeta p { margin: 0; font-size: 14.5px; line-height: 1.6; }
+
+    .split-texto p { font-size: 16.5px; margin: 0 0 18px; }
+    .split-texto p:last-of-type { margin-bottom: 0; }
+
+    /* ------------------------------------------------------------- cierre */
+
+    .cierre { text-align: center; padding: 104px 0; }
+    .cierre .seccion-bajada { margin: 0 auto 32px; }
+
+    /* -------------------------------------------------------------- footer */
+
+    .pie {
+      border-top: 1px solid var(--linea);
+      padding: 30px 0 44px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      font-size: 14px;
+      color: var(--tinta-3);
+    }
+    .pie a { text-decoration: none; }
+    .pie a:hover { color: var(--tinta-2); }
+
+    /* ------------------------------------------------------------ entrada */
+
+    .aparece {
+      animation: subir .6s cubic-bezier(.22,.61,.36,1) backwards;
+    }
+    .aparece-2 { animation-delay: .08s; }
+
+    @keyframes subir {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: none; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .aparece { animation: none; }
+      * { transition-duration: .01ms !important; }
+    }
+
+    /* ------------------------------------------------------------- angosto */
+
+    @media (max-width: 900px) {
+      .hero {
+        grid-template-columns: 1fr;
+        gap: 52px;
+        padding: 32px 0 72px;
+      }
+      .mock { aspect-ratio: 1 / 0.78; max-width: 460px; }
+      .split { grid-template-columns: 1fr; gap: 44px; }
+      .split-texto { order: -1; }
+      .pasos { grid-template-columns: 1fr; gap: 22px; }
+      .seccion { padding: 72px 0; }
+    }
+
+    @media (max-width: 560px) {
+      .envoltura { padding: 0 20px; }
+      .nav { height: 72px; }
+      .mock { aspect-ratio: 1 / 1.02; }
+      .pantalla { width: 88%; left: 0; top: 14%; padding: 26px 24px 24px; }
+      .flotante-alternativa { right: 0; top: 0; }
+      .flotante-nota { left: 0; bottom: 4%; }
+      .tarjetas { grid-template-columns: 1fr; }
+      .tarjeta-alta { margin-top: 0; }
+      .codigo-form .boton { flex: 1 1 100%; }
+      .cierre { padding: 76px 0; }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="envoltura">
+    <nav class="nav">
+      <a class="marca" href="{{ url_for('index') }}">
+        <svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true">
+          <circle cx="13" cy="13" r="12" stroke="#14161c" stroke-width="1.5"/>
+          <path d="M7.8 13.4l3.4 3.4 7-7.4" stroke="#0d6efd" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Fuenti
+      </a>
+      <div class="nav-acciones">
+        {% if current_user.is_authenticated %}
+          <a class="boton boton-tenue" href="{{ url_for('dashboard') }}">Ir al panel</a>
+        {% else %}
+          <a class="boton boton-plano" href="#como-funciona">Cómo funciona</a>
+          <a class="boton boton-tenue" href="{{ url_for('auth.login') }}">Iniciar sesión</a>
+        {% endif %}
+      </div>
+    </nav>
+  </header>
+
+  <main>
+
+    <section class="envoltura hero">
+      <div class="aparece">
+        <h1>Evalúa en la sala.<br>Sin cuentas ni apps.</h1>
+
+        <p class="hero-bajada">
+          Fuenti toma evaluaciones en capacitaciones presenciales. Proyectas un
+          código, cada persona entra con su RUT desde su teléfono y ve su nota
+          al terminar.
+        </p>
+
+        {# Sin ruta nueva en el backend: el formulario arma la URL de ingreso
+           que ya existe. La base viene de url_for para que siga funcionando si
+           algun dia la app se monta bajo un prefijo. #}
+        <form class="codigo-form" id="form-codigo"
+              data-url-ingreso="{{ url_for('participante.ingreso', codigo='__CODIGO__') }}">
+          <div class="codigo-campo">
+            <label class="oculto-visual" for="codigo">Código de sesión</label>
+            <input class="codigo-input" id="codigo" name="codigo"
+                   placeholder="K7M4PQ" maxlength="6"
+                   autocomplete="off" autocapitalize="characters"
+                   spellcheck="false" required>
+          </div>
+          <button class="boton boton-solido" type="submit">Entrar a la sesión</button>
+        </form>
+
+        <p class="pie-campo">
+          Seis caracteres. No lleva 0, 1, O ni I, para que se pueda dictar en
+          voz alta sin que nadie pregunte dos veces.
+        </p>
+
+        <p class="hero-secundario">
+          ¿Haces la capacitación?
+          <a href="{{ url_for('auth.login') }}">Entra con tu cuenta de facilitador</a>.
+        </p>
+      </div>
+
+      <div class="mock aparece aparece-2" aria-hidden="true">
+        <div class="mock-deco">
+          <svg width="100%" height="100%" viewBox="0 0 520 480" fill="none"
+               preserveAspectRatio="xMidYMid meet">
+            <defs>
+              <pattern id="puntos" x="0" y="0" width="14" height="14"
+                       patternUnits="userSpaceOnUse">
+                <circle cx="1.6" cy="1.6" r="1.6" fill="#d9dee9"/>
+              </pattern>
+            </defs>
+            <rect x="330" y="286" width="150" height="128" fill="url(#puntos)"/>
+            <circle cx="404" cy="118" r="66" stroke="#dbe6ff" stroke-width="2"/>
+            <circle cx="70" cy="372" r="38" stroke="#f0dfe4" stroke-width="2"/>
+          </svg>
+        </div>
+
+        <div class="pantalla">
+          <span class="pantalla-etiqueta">Código de sesión</span>
+          <span class="pantalla-codigo">K7M4PQ</span>
+          <span class="pantalla-pie">Prevención de riesgos · 22 personas conectadas</span>
+        </div>
+
+        <div class="flotante flotante-alternativa">
+          <span class="marca-ok">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M2.5 6.3l2.4 2.4L9.6 3.6" stroke="currentColor"
+                    stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+          Alternativa C
+        </div>
+
+        <div class="flotante flotante-nota">
+          <span class="nota-cifra">6,2</span>
+          <span class="nota-texto">85% de logro</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="franja">
+      <div class="envoltura escala">
+        <div class="escala-barra">
+          <span class="escala-linea"></span>
+          <span class="escala-hito escala-hito-1">1,0</span>
+          <span class="escala-hito escala-hito-4">4,0</span>
+          <span class="escala-hito escala-hito-7">7,0</span>
+        </div>
+        <p class="escala-nota">
+          Escala chilena, con el eje donde corresponde: el <strong>4,0</strong>
+          cae exactamente en el umbral de aprobación que el facilitador fija
+          para esa sesión, no en un 60% fijo.
+        </p>
+      </div>
+    </section>
+
+    <section class="seccion" id="como-funciona">
+      <div class="envoltura">
+        <h2 class="seccion-titulo">Tres pasos, y el tercero<br>lo hace la sala.</h2>
+        <p class="seccion-bajada">
+          No hay descargas, ni claves que repartir, ni una lista de correos que
+          armar antes de empezar.
+        </p>
+
+        <div class="pasos">
+          <div class="paso">
+            <h3>Armas la evaluación</h3>
+            <p>
+              Escribes las preguntas con sus alternativas y marcas la correcta.
+              También puedes importarlas de una vez.
+            </p>
+          </div>
+          <div class="paso">
+            <h3>Abres una sesión</h3>
+            <p>
+              Fuenti genera el código y tú fijas el umbral de aprobación. Lo
+              proyectas o lo escribes en la pizarra.
+            </p>
+          </div>
+          <div class="paso">
+            <h3>Cada persona entra con su RUT</h3>
+            <p>
+              Responde desde su teléfono y ve su nota al terminar. Tú ves el
+              informe del grupo apenas cierras la sesión.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="seccion seccion-gris">
+      <div class="envoltura split">
+        <div class="tarjetas">
+          <div class="tarjeta">
+            <div class="tarjeta-icono">
+              <svg width="19" height="19" viewBox="0 0 20 20" fill="none">
+                <path d="M3 16.5V9m4.7 7.5V4m4.6 12.5v-5.5M17 16.5V6.5"
+                      stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <h3>Informe por persona y del grupo</h3>
+            <p>
+              Nota, porcentaje de logro y el desglose pregunta por pregunta,
+              listo para imprimir.
+            </p>
+          </div>
+
+          <div class="tarjeta tarjeta-alta">
+            <div class="tarjeta-icono">
+              <svg width="19" height="19" viewBox="0 0 20 20" fill="none">
+                <rect x="4" y="8.6" width="12" height="8" rx="2"
+                      stroke="currentColor" stroke-width="1.7"/>
+                <path d="M6.8 8.6V6.4a3.2 3.2 0 016.4 0v2.2"
+                      stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <h3>El RUT no se guarda</h3>
+            <p>
+              Se guarda una huella irreversible. Alcanza para reconocer a la
+              misma persona en otra sesión, y no para saber quién es.
+            </p>
+          </div>
+
+          <div class="tarjeta">
+            <div class="tarjeta-icono">
+              <svg width="19" height="19" viewBox="0 0 20 20" fill="none">
+                <path d="M10 2.6l6 2.6v4.4c0 3.6-2.4 6.4-6 7.8-3.6-1.4-6-4.2-6-7.8V5.2l6-2.6z"
+                      stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <h3>Lo respondido queda congelado</h3>
+            <p>
+              Si editas la evaluación después, los resultados ya rendidos no
+              cambian ni una coma.
+            </p>
+          </div>
+
+          <div class="tarjeta tarjeta-alta">
+            <div class="tarjeta-icono">
+              <svg width="19" height="19" viewBox="0 0 20 20" fill="none">
+                <path d="M3.4 12.6l3.4 3.4M3.4 12.6L12 4a2.6 2.6 0 013.7 3.7l-8.6 8.6"
+                      stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+                      stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <h3>El umbral es tuyo</h3>
+            <p>
+              Cada sesión guarda la exigencia con que se rindió, aunque después
+              la cambies para la siguiente.
+            </p>
+          </div>
+        </div>
+
+        <div class="split-texto">
+          <h2 class="seccion-titulo">Pensado para la sala,<br>no para el escritorio.</h2>
+          <p>
+            En una capacitación presencial el tiempo es del relator, no del
+            software. Por eso el participante no crea una cuenta, no recibe un
+            correo y no instala nada: escribe seis caracteres y su RUT.
+          </p>
+          <p>
+            Y como la identidad viaja como huella y no como dato, la misma
+            persona se puede seguir entre una capacitación y la siguiente sin
+            que su RUT quede almacenado en ninguna parte.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="envoltura cierre">
+      <h2 class="seccion-titulo">¿Tienes un código?</h2>
+      <p class="seccion-bajada">
+        Súbelo arriba y estás dentro. Si eres facilitador, tu panel te espera
+        con las evaluaciones que ya armaste.
+      </p>
+      <a class="boton boton-solido" href="#codigo" id="ir-al-codigo">Ingresar con un código</a>
+    </section>
+
+  </main>
+
+  <footer class="envoltura">
+    <div class="pie">
+      <span>Fuenti · Evaluaciones para capacitación presencial</span>
+      <a href="{{ url_for('auth.login') }}">Iniciar sesión</a>
+    </div>
+  </footer>
+
+  <script>
+    /* El formulario no envia nada: arma la URL de ingreso que ya existe y
+       navega. Sin ruta nueva, sin migracion, sin backend que mantener.
+       El codigo se guarda siempre en mayuscula porque la busqueda en la BD es
+       exacta: "k7m4pq" no encontraria la sesion "K7M4PQ". */
+    (function () {
+      var form = document.getElementById("form-codigo");
+      if (!form) return;
+      var campo = document.getElementById("codigo");
+
+      /* Mayuscula mientras escribe. Es seguro hacerlo en cada tecla porque no
+         se agregan ni se quitan caracteres: el cursor no se mueve. */
+      campo.addEventListener("input", function () {
+        var arriba = campo.value.toUpperCase();
+        if (campo.value !== arriba) campo.value = arriba;
+      });
+
+      /* El boton del cierre no solo baja: deja el cursor puesto. Bajar y que
+         la persona tenga que hacer un segundo clic seria dejar el trabajo a
+         medias. */
+      var atajo = document.getElementById("ir-al-codigo");
+      if (atajo) {
+        atajo.addEventListener("click", function () {
+          setTimeout(function () { campo.focus({ preventScroll: true }); }, 420);
+        });
+      }
+
+      form.addEventListener("submit", function (evento) {
+        evento.preventDefault();
+        var codigo = campo.value.trim().toUpperCase();
+        if (!codigo) { campo.focus(); return; }
+        window.location.href = form.dataset.urlIngreso.replace("__CODIGO__", encodeURIComponent(codigo));
+      });
+    })();
+  </script>
+
+</body>
+</html>
