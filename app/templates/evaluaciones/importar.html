@@ -8,6 +8,40 @@
   </a>
 </div>
 
+{% if vista_previa %}
+<div class="card card-body mb-4 border-info">
+  <h2 class="h5 mb-1">
+    Vista previa — {{ vista_previa|length }}
+    pregunta{{ 's' if vista_previa|length != 1 else '' }}
+  </h2>
+  <p class="text-muted small mb-3">
+    Así quedará la evaluación. Si está correcto, pulsa "Importar" en el
+    formulario de abajo. Nada se ha guardado todavía.
+  </p>
+  <ol class="mb-0 ps-3">
+    {% for p in vista_previa %}
+    <li class="mb-3">
+      <div class="mb-1">
+        {{ p.enunciado }}
+        <span class="badge text-bg-secondary ms-1">{{ p.tipo_label }}</span>
+      </div>
+      <ul class="list-unstyled mb-0 ms-2">
+        {% for a in p.alternativas %}
+        <li>
+          {% if a.correcta %}
+            <span class="text-success">✔</span> <strong>{{ a.texto }}</strong>
+          {% else %}
+            <span class="text-muted">○</span> {{ a.texto }}
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </li>
+    {% endfor %}
+  </ol>
+</div>
+{% endif %}
+
 <div class="row g-4">
   <!-- Izquierda: formulario -->
   <div class="col-lg-7">
@@ -38,7 +72,12 @@
         </div>
       </div>
 
-      <button type="submit" class="btn btn-primary align-self-start">Importar</button>
+      <div class="d-flex gap-2">
+        <button type="submit" name="accion" value="previsualizar"
+                class="btn btn-outline-primary">Vista previa</button>
+        <button type="submit" name="accion" value="importar"
+                class="btn btn-primary">Importar</button>
+      </div>
     </form>
   </div>
 

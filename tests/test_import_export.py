@@ -84,7 +84,24 @@ def _subir(client, data, titulo="Importada", umbral="60"):
         json_texto = data
     return client.post(
         "/evaluaciones/importar",
-        data={"titulo": titulo, "umbral": umbral, "json": json_texto},
+        data={"titulo": titulo, "umbral": umbral, "json": json_texto,
+              "accion": "importar"},
+        follow_redirects=True,
+    )
+
+
+def _previsualizar(client, data, titulo="Prev", umbral="60"):
+    """POST con la acción de vista previa (no debe crear nada)."""
+    if isinstance(data, dict):
+        json_texto = json.dumps(data)
+    elif isinstance(data, bytes):
+        json_texto = data.decode("utf-8")
+    else:
+        json_texto = data
+    return client.post(
+        "/evaluaciones/importar",
+        data={"titulo": titulo, "umbral": umbral, "json": json_texto,
+              "accion": "previsualizar"},
         follow_redirects=True,
     )
 
@@ -303,6 +320,56 @@ def test_importar_preguntas_vacias_falla(client, app, facilitador):
     _login(client)
     resp = _subir(client, {"preguntas": []})
     assert "al menos una pregunta".encode("utf-8") in resp.data
+    with app.app_context():
+        assert Evaluacion.query.count() == 0
+
+
+# -------------------- Vista previa --------------------
+
+def test_vista_previa_valida_muestra_y_no_crea(client, app, facilitador):
+    _login(client)
+    resp = _previsualizar(client, _cuerpo())
+    cuerpo = resp.get_data(as_text=True)
+    assert "Vista previa" in cuerpo
+    assert "¿Capital de Chile?" in cuerpo
+    assert "Santiago" in cuerpo
+    with app.app_context():
+        assert Evaluacion.query.count() == 0
+
+
+def test_vista_previa_marca_la_correcta(client, facilitador):
+    _login(client)
+    cuerpo = _previsualizar(client, _cuerpo()).get_data(as_text=True)
+    assert "✔" in cuerpo  # la correcta se muestra marcada
+
+
+def test_vista_previa_normaliza_vf(client, facilitador):
+    """La V/F se muestra como Verdadero/Falso aunque el JSON traiga otros textos."""
+    _login(client)
+    data = {"preguntas": [{
+        "enunciado": "¿Cierto?",
+        "tipo": "verdadero_falso",
+        "alternativas": [
+            {"texto": "sí", "es_correcta": True},
+            {"texto": "no", "es_correcta": False},
+        ],
+    }]}
+    cuerpo = _previsualizar(client, data).get_data(as_text=True)
+    assert "Verdadero" in cuerpo and "Falso" in cuerpo
+
+
+def test_vista_previa_invalida_no_crea(client, app, facilitador):
+    _login(client)
+    resp = _previsualizar(client, "{ json roto")
+    assert b"no es un JSON" in resp.data
+    with app.app_context():
+        assert Evaluacion.query.count() == 0
+
+
+def test_vista_previa_error_de_validacion_no_crea(client, app, facilitador):
+    _login(client)
+    resp = _previsualizar(client, _cuerpo(), titulo="")
+    assert "título es obligatorio".encode("utf-8") in resp.data
     with app.app_context():
         assert Evaluacion.query.count() == 0
 

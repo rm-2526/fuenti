@@ -210,22 +210,29 @@ def importar():
     """
     if request.method == "GET":
         return render_template(
-            "evaluaciones/importar.html", titulo="", umbral="60", json_texto=""
+            "evaluaciones/importar.html",
+            titulo="",
+            umbral="60",
+            json_texto="",
+            vista_previa=None,
         )
 
     # El titulo y el umbral los define el facilitador aqui; el JSON pegado solo
     # aporta las preguntas. Si algo falla, se re-muestran (incluido el texto
-    # pegado) para no re-escribirlos.
+    # pegado) para no re-escribirlos. Dos acciones: "previsualizar" (muestra el
+    # desglose sin crear nada) e "importar" (crea la evaluacion).
+    accion = request.form.get("accion", "importar")
     titulo = request.form.get("titulo", "").strip()
     umbral_str = request.form.get("umbral", "").strip()
     json_texto = request.form.get("json", "")
 
-    def _re_render():
+    def _re_render(vista_previa=None):
         return render_template(
             "evaluaciones/importar.html",
             titulo=titulo,
             umbral=umbral_str,
             json_texto=json_texto,
+            vista_previa=vista_previa,
         )
 
     if not json_texto.strip():
@@ -246,6 +253,8 @@ def importar():
         )
         return _re_render()
 
+    # La validacion corre SIEMPRE, tanto en vista previa como al importar. Asi
+    # "Importar" nunca crea algo distinto de lo que se acaba de previsualizar.
     preguntas, errores = _json_a_preguntas(data)
     errores = errores + _validar(titulo, umbral_str, preguntas)
 
@@ -253,6 +262,15 @@ def importar():
         for e in errores:
             flash(e, "danger")
         return _re_render()
+
+    # JSON valido. En vista previa mostramos el desglose SIN tocar la base.
+    if accion == "previsualizar":
+        flash(
+            "Vista previa: revisa las preguntas y pulsa Importar para crear la "
+            "evaluación.",
+            "info",
+        )
+        return _re_render(vista_previa=_vista_previa(preguntas))
 
     evaluacion = Evaluacion(
         facilitador_id=current_user.id,
@@ -939,6 +957,35 @@ def _json_a_preguntas(data):
         )
 
     return preguntas, errores
+
+
+def _vista_previa(preguntas):
+    """Arma el desglose legible para la vista previa a partir de las preguntas ya
+    parseadas y validadas. Muestra los textos TAL COMO quedaran al crear: para
+    las V/F normaliza a "Verdadero"/"Falso" por orden (igual que la app), y marca
+    cual alternativa es la correcta.
+    """
+    etiquetas = {
+        "opcion_multiple": "Opción múltiple",
+        "verdadero_falso": "Verdadero / Falso",
+    }
+    vista = []
+    for p in preguntas:
+        es_vf = p["tipo"] == "verdadero_falso"
+        alternativas = []
+        for pos, (j, texto) in enumerate(p["alternativas"], start=1):
+            display = ("Verdadero" if pos == 1 else "Falso") if es_vf else texto
+            alternativas.append(
+                {"texto": display, "correcta": str(j) == str(p["correcta"])}
+            )
+        vista.append(
+            {
+                "enunciado": p["enunciado"],
+                "tipo_label": etiquetas.get(p["tipo"], p["tipo"]),
+                "alternativas": alternativas,
+            }
+        )
+    return vista
 
 
 def _tiene_sesion_abierta(evaluacion) -> bool:
