@@ -51,10 +51,16 @@
     {% block content %}{% endblock %}
   </main>
 
-  {# Modal de confirmación reutilizable. Cualquier botón con la clase
-     .js-confirmar abre este modal en lugar del confirm() del navegador.
-     El texto se toma de los data-attributes del botón (ver listado.html
-     y detalle.html). #}
+  {# Modal de confirmación reutilizable, en dos modos:
+
+     1. Declarativo: cualquier botón de submit con la clase .js-confirmar abre
+        este modal en lugar del confirm() del navegador, y al aceptar envía su
+        formulario. El texto sale de sus data-attributes (ver listado.html,
+        detalle.html, detalle_sesion.html y admin/facilitadores.html).
+
+     2. Programatico: window.Fuenti.confirmar({...}) y window.Fuenti.avisar({...})
+        para el JS de la app, donde la accion NO es enviar un formulario (por
+        ejemplo quitar una pregunta del formulario de creacion). #}
   <div class="modal fade" id="modalConfirmar" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
@@ -64,7 +70,8 @@
         </div>
         <div class="modal-body" id="modalConfirmarMensaje"></div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-outline-secondary"
+                  id="modalConfirmarCancelar" data-bs-dismiss="modal">Cancelar</button>
           <button type="button" class="btn btn-danger" id="modalConfirmarAceptar">Confirmar</button>
         </div>
       </div>
@@ -73,7 +80,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    // Reemplaza el confirm() del navegador por el modal de arriba.
+    // Reemplaza el confirm() y el alert() del navegador por el modal de arriba.
     (function () {
       var modalEl = document.getElementById("modalConfirmar");
       if (!modalEl) return;
@@ -81,26 +88,63 @@
       var tituloEl = document.getElementById("modalConfirmarTitulo");
       var mensajeEl = document.getElementById("modalConfirmarMensaje");
       var aceptarEl = document.getElementById("modalConfirmarAceptar");
-      var formPendiente = null;
+      var cancelarEl = document.getElementById("modalConfirmarCancelar");
+      var alAceptar = null;   // que hacer si el usuario confirma
 
-      // Delegación de eventos: funciona con uno o con muchos botones
-      // (por ejemplo, cada fila de la Biblioteca).
+      // Abre el modal con el texto pedido. `soloAviso` esconde "Cancelar", para
+      // los mensajes informativos que antes eran un alert().
+      function abrir(opciones) {
+        var o = opciones || {};
+        tituloEl.textContent = o.titulo || "Confirmar";
+        mensajeEl.textContent = o.mensaje || "¿Confirmar esta acción?";
+        aceptarEl.textContent = o.boton || "Confirmar";
+        aceptarEl.className = "btn " + (o.clase || "btn-danger");
+        cancelarEl.classList.toggle("d-none", o.soloAviso === true);
+        alAceptar = typeof o.onAceptar === "function" ? o.onAceptar : null;
+        modal.show();
+      }
+
+      // Modo declarativo. Delegación de eventos: funciona con uno o con muchos
+      // botones (por ejemplo, cada fila de la Biblioteca).
       document.addEventListener("click", function (e) {
         var btn = e.target.closest(".js-confirmar");
         if (!btn) return;
         e.preventDefault();                 // no enviar el formulario todavía
-        formPendiente = btn.form;
-        tituloEl.textContent = btn.dataset.confirmarTitulo || "Confirmar";
-        mensajeEl.textContent = btn.dataset.confirmarMensaje || "¿Confirmar esta acción?";
-        aceptarEl.textContent = btn.dataset.confirmarBoton || "Confirmar";
-        aceptarEl.className = "btn " + (btn.dataset.confirmarClase || "btn-danger");
-        modal.show();
+        var form = btn.form;
+        abrir({
+          titulo: btn.dataset.confirmarTitulo,
+          mensaje: btn.dataset.confirmarMensaje,
+          boton: btn.dataset.confirmarBoton,
+          clase: btn.dataset.confirmarClase,
+          onAceptar: function () { if (form) form.submit(); },
+        });
       });
 
-      // Al aceptar, se envía el formulario asociado al botón que abrió el modal.
       aceptarEl.addEventListener("click", function () {
-        if (formPendiente) formPendiente.submit();
+        var accion = alAceptar;
+        alAceptar = null;
+        modal.hide();
+        if (accion) accion();
       });
+
+      // Si se cierra por "Cancelar", la X o el fondo, no queda accion pendiente.
+      modalEl.addEventListener("hidden.bs.modal", function () {
+        alAceptar = null;
+      });
+
+      // Modo programatico, para el JS de la app.
+      window.Fuenti = window.Fuenti || {};
+      window.Fuenti.confirmar = abrir;
+      window.Fuenti.avisar = function (opciones) {
+        var o = opciones || {};
+        abrir({
+          titulo: o.titulo || "Aviso",
+          mensaje: o.mensaje,
+          boton: o.boton || "Entendido",
+          clase: o.clase || "btn-primary",
+          soloAviso: true,
+        });
+      };
     })();
   </script>
 </body>

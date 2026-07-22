@@ -520,3 +520,30 @@ def test_abrir_sesion_desde_iniciar_crea_sesion(client, facilitador, app):
         s = db.session.query(Sesion).filter_by(evaluacion_id=eval_id).first()
         assert s is not None
         assert s.estado == "abierta"
+
+
+# ----------------------- Diálogos de confirmación -----------------------
+
+def test_formulario_nueva_usa_el_modal_compartido(client, facilitador):
+    """El formulario de creación no debe depender de los diálogos nativos: usa
+    el mismo modal de base.html que Eliminar evaluación o Cerrar sesión."""
+    _login(client)
+    cuerpo = client.get("/evaluaciones/nueva").get_data(as_text=True)
+    assert 'id="modalConfirmar"' in cuerpo          # el modal viene en la página
+    assert "Fuenti.confirmar" in cuerpo             # API programática expuesta
+    assert "Fuenti.avisar" in cuerpo
+
+
+def test_modal_compartido_conserva_el_modo_declarativo(client, app, facilitador):
+    """Los botones .js-confirmar (Biblioteca, sesiones, admin) siguen funcionando
+    igual: al aceptar se envía el formulario del botón."""
+    _login(client)
+    with app.app_context():
+        db.session.add(
+            Evaluacion(facilitador_id=facilitador.id, titulo="Con modal", umbral_aprobacion=60)
+        )
+        db.session.commit()
+    cuerpo = client.get("/evaluaciones/").get_data(as_text=True)
+    assert "js-confirmar" in cuerpo
+    assert "data-confirmar-titulo" in cuerpo
+    assert "form.submit()" in cuerpo

@@ -177,6 +177,34 @@
     radios[1].checked = marcadoTmp;
   }
 
+  // -------- Diálogos --------
+  // Se usa el modal compartido de base.html (window.Fuenti) en vez de los
+  // alert()/confirm() del navegador, para que esta página se vea igual que
+  // eliminar una evaluación o cerrar una sesión. Si por algún motivo el modal no
+  // está disponible (Bootstrap no cargó), se cae a los diálogos nativos: es
+  // preferible un popup feo a que el botón no haga nada.
+
+  function avisar(mensaje) {
+    if (window.Fuenti && window.Fuenti.avisar) {
+      window.Fuenti.avisar({ mensaje: mensaje });
+      return;
+    }
+    alert(mensaje);
+  }
+
+  function confirmar(opciones, alAceptar) {
+    if (window.Fuenti && window.Fuenti.confirmar) {
+      window.Fuenti.confirmar({
+        titulo: opciones.titulo,
+        mensaje: opciones.mensaje,
+        boton: opciones.boton,
+        onAceptar: alAceptar,
+      });
+      return;
+    }
+    if (confirm(opciones.mensaje)) alAceptar();
+  }
+
   function renumerarTitulos() {
     container.querySelectorAll(".pregunta-titulo").forEach((el, i) => {
       el.textContent = `Pregunta ${i + 1}`;
@@ -208,7 +236,7 @@
       const altContainer = preguntaEl.querySelector(".alternativas-container");
       const n = altContainer.querySelectorAll(".alternativa").length;
       if (n >= MAX_ALTERNATIVAS) {
-        alert(`Máximo ${MAX_ALTERNATIVAS} alternativas por pregunta.`);
+        avisar(`Máximo ${MAX_ALTERNATIVAS} alternativas por pregunta.`);
         return;
       }
       const preguntaIdx = parseInt(preguntaEl.dataset.preguntaIdx, 10);
@@ -222,7 +250,7 @@
       const altContainer = preguntaEl.querySelector(".alternativas-container");
       const n = altContainer.querySelectorAll(".alternativa").length;
       if (n <= MIN_ALTERNATIVAS) {
-        alert(`Mínimo ${MIN_ALTERNATIVAS} alternativas por pregunta.`);
+        avisar(`Mínimo ${MIN_ALTERNATIVAS} alternativas por pregunta.`);
         return;
       }
       t.closest(".alternativa").remove();
@@ -237,13 +265,24 @@
     if (t.classList.contains("btn-quitar-pregunta")) {
       const n = container.querySelectorAll(".pregunta").length;
       if (n <= 1) {
-        alert("Debe haber al menos 1 pregunta.");
+        avisar("Debe haber al menos 1 pregunta.");
         return;
       }
-      if (confirm("¿Quitar esta pregunta?")) {
-        t.closest(".pregunta").remove();
-        renumerarTitulos();
-      }
+      // Se captura la pregunta ahora: el modal responde después, de forma
+      // asíncrona, y para entonces el evento ya no sirve para ubicarla.
+      const preguntaEl = t.closest(".pregunta");
+      confirmar(
+        {
+          titulo: "Quitar pregunta",
+          mensaje:
+            "¿Quitar esta pregunta del formulario? Todavía no se ha guardado nada.",
+          boton: "Quitar",
+        },
+        () => {
+          preguntaEl.remove();
+          renumerarTitulos();
+        }
+      );
       return;
     }
   });
