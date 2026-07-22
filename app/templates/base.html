@@ -147,5 +147,9 @@
       };
     })();
   </script>
+
+  {# Scripts propios de cada pagina. Va DESPUES del bloque de arriba para que
+     window.Fuenti ya exista cuando corran, y despues de Bootstrap. #}
+  {% block scripts %}{% endblock %}
 </body>
 </html>

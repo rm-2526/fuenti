@@ -28,6 +28,19 @@
           </div>
           <div class="mb-3">
             <label for="rut" class="form-label">RUT</label>
+            {#
+              data-rut es el enganche que busca static/js/rut.js. Los dos divs
+              de feedback tienen que ser hermanos del input y venir DESPUÉS de
+              él: así los muestra el CSS de Bootstrap cuando el input toma la
+              clase .is-valid / .is-invalid.
+
+              El texto del error lo reescribe el JS según el problema (formato
+              o dígito verificador); el que está acá es el respaldo por si el
+              JS no alcanzó a cargar.
+
+              Sin inputmode="numeric" a propósito: cerca del 9% de los RUT
+              terminan en K y varios teclados numéricos de celular no la traen.
+            #}
             <input type="text"
                    class="form-control"
                    id="rut"
@@ -35,7 +48,16 @@
                    value="{{ rut }}"
                    placeholder="12.345.678-5"
                    autocomplete="off"
+                   autocapitalize="characters"
+                   spellcheck="false"
+                   data-rut
                    required>
+            <div class="valid-feedback" aria-live="polite">
+              RUT válido.
+            </div>
+            <div class="invalid-feedback" aria-live="polite">
+              Revisa el RUT: no corresponde a uno válido.
+            </div>
             <div class="form-text">
               Puedes escribirlo con puntos y guion, o sin nada.
             </div>
@@ -46,4 +68,8 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/rut.js') }}"></script>
 {% endblock %}
