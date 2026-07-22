@@ -5,6 +5,55 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Fuenti{% endblock %}</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  {# Misma familia que la portada (Jost). Carga solo tres pesos. #}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500&display=swap"
+        rel="stylesheet">
+
+  {#
+    Capa visual sobre Bootstrap. NO cambia estructura ni contenido de ninguna
+    pagina: solo pinta encima. Bootstrap sigue mandando en tablas, botones,
+    grillas y el modal. Aca solo se toca la tipografia de titulos, el color del
+    navbar y la marca, para que la app y la portada se sientan la misma cosa.
+    Si algun dia molesta, se borra este bloque y todo vuelve exactamente a como
+    estaba. Va DESPUES del CSS de Bootstrap para ganarle en especificidad.
+  #}
+  <style>
+    :root { --fuenti-tinta: #14161c; --fuenti-linea: #e8eaef; }
+
+    /* Jost solo en titulos y en la marca, igual que en la portada: el texto
+       corrido se queda con la tipografia de sistema de Bootstrap. */
+    h1, h2, h3, h4, h5, h6,
+    .navbar-brand, .modal-title {
+      font-family: "Jost", system-ui, -apple-system, "Segoe UI", sans-serif;
+      letter-spacing: -0.01em;
+    }
+
+    /* Navbar claro en vez del negro, con una hairline igual a la de la
+       portada. Los colores de los hijos se ajustan mas abajo para que sigan
+       siendo legibles sobre blanco. */
+    .navbar.bg-dark {
+      background-color: #fff !important;
+      border-bottom: 1px solid var(--fuenti-linea);
+    }
+
+    .navbar .marca-fuenti {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      color: var(--fuenti-tinta);
+      font-weight: 500;
+      font-size: 20px;
+    }
+    .navbar .marca-fuenti svg { display: block; }
+
+    /* El boton del nombre y el de iniciar sesion venian pensados para fondo
+       oscuro (texto claro). Sobre blanco tienen que ir oscuros. */
+    .navbar .dropdown-toggle.text-light { color: var(--fuenti-tinta) !important; }
+    .navbar .dropdown-toggle.text-light:hover { color: #000 !important; }
+  </style>
 </head>
 <body class="bg-light">
   {# Navbar minimalista: el logo lleva al Panel (que es el menú principal)
@@ -12,7 +61,14 @@
      Al abrirlo se ve el nombre completo, el correo y "Cerrar sesión". #}
   <nav class="navbar navbar-dark bg-dark">
     <div class="container">
-      <a class="navbar-brand" href="{{ url_for('dashboard') if current_user.is_authenticated else url_for('index') }}">Fuenti</a>
+      <a class="navbar-brand marca-fuenti p-0" href="{{ url_for('dashboard') if current_user.is_authenticated else url_for('index') }}">
+        <svg width="24" height="24" viewBox="0 0 26 26" fill="none" aria-hidden="true">
+          <circle cx="13" cy="13" r="12" stroke="#14161c" stroke-width="1.5"/>
+          <path d="M7.8 13.4l3.4 3.4 7-7.4" stroke="#0d6efd" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Fuenti
+      </a>
       {% if current_user.is_authenticated %}
         {% set _primer_nombre = current_user.nombre.split()[0] if current_user.nombre and current_user.nombre.split() else current_user.nombre %}
         <div class="dropdown">
@@ -31,7 +87,7 @@
           </ul>
         </div>
       {% else %}
-        <a class="btn btn-outline-light btn-sm" href="{{ url_for('auth.login') }}">Iniciar sesión</a>
+        <a class="btn btn-outline-primary btn-sm" href="{{ url_for('auth.login') }}">Iniciar sesión</a>
       {% endif %}
     </div>
   </nav>
