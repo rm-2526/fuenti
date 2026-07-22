@@ -17,7 +17,7 @@ from app.models import (
 )
 
 
-RUT_VALIDO = "11.111.111-1"
+RUT_VALIDO = "15.432.198-5"
 
 
 def _login(client, email="facilitador@fuenti.cl", password="fuenti2026"):

@@ -20,7 +20,8 @@ from app import db
 from app.models import Alternativa, Evaluacion, Participante, Pregunta, Sesion
 
 
-RUT_INVALIDO = "11.111.111-2"  # DV incorrecto
+RUT_INVALIDO = "15.432.198-4"   # DV incorrecto
+RUT_BLOQUEADO = "11.111.111-1"  # pasa modulo 11, pero no se acepta
 
 
 def _sesion_abierta(app, facilitador_id, codigo="RUTFRT"):
@@ -99,3 +100,94 @@ def test_el_servidor_sigue_rechazando_un_rut_invalido(client, facilitador, app):
     assert resp.status_code == 200  # re-render, no redirect
     with app.app_context():
         assert db.session.query(Participante).count() == 0
+
+
+# === Bloqueo de RUT que pasan modulo 11 pero no aceptamos ===
+
+def test_el_servidor_rechaza_un_rut_bloqueado(client, facilitador, app):
+    """La regla vive en el servidor, no solo en el JS: desactivar JavaScript no
+    debe alcanzar para meter una identidad falsa en el historial."""
+    codigo = _sesion_abierta(app, facilitador.id, codigo="RUTBLQ")
+
+    resp = client.post(
+        f"/sesion/{codigo}/ingreso",
+        data={"rut": RUT_BLOQUEADO, "nombre": "Juan Perez"},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 200  # re-render, no redirect
+    with app.app_context():
+        assert db.session.query(Participante).count() == 0
+
+
+def test_el_bloqueo_ignora_el_formato(client, facilitador, app):
+    """Sin puntos ni guion es el mismo RUT y se rechaza igual."""
+    codigo = _sesion_abierta(app, facilitador.id, codigo="RUTBL2")
+
+    client.post(
+        f"/sesion/{codigo}/ingreso",
+        data={"rut": "111111111", "nombre": "Juan Perez"},
+        follow_redirects=False,
+    )
+
+    with app.app_context():
+        assert db.session.query(Participante).count() == 0
+
+
+def test_el_mensaje_del_bloqueo_es_distinto_al_de_formato(client, facilitador, app):
+    """Dos rechazos distintos necesitan dos mensajes distintos: 'esta mal
+    escrito' no le sirve a quien escribio un RUT aritmeticamente perfecto."""
+    codigo = _sesion_abierta(app, facilitador.id, codigo="RUTBL3")
+
+    resp = client.post(
+        f"/sesion/{codigo}/ingreso",
+        data={"rut": RUT_BLOQUEADO, "nombre": "Juan Perez"},
+        follow_redirects=True,
+    )
+    html = resp.data.decode("utf-8")
+
+    assert "no se acepta" in html
+    assert "Revisa el formato" not in html
+
+
+def test_un_rut_normal_sigue_entrando(client, facilitador, app):
+    """La red de contencion del cambio: bloquear no puede dejar fuera a nadie
+    mas que a los de la lista."""
+    codigo = _sesion_abierta(app, facilitador.id, codigo="RUTOK1")
+
+    resp = client.post(
+        f"/sesion/{codigo}/ingreso",
+        data={"rut": "15.432.198-5", "nombre": "Juan Perez"},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 302
+    with app.app_context():
+        assert db.session.query(Participante).count() == 1
+
+
+def test_el_js_espeja_la_lista_completa_del_servidor(client):
+    """La lista esta duplicada (Python y JavaScript) y las copias se separan.
+    Este test es el pegamento: si alguien agrega un RUT a RUTS_BLOQUEADOS y se
+    olvida de rut.js, se pone rojo aca en vez de descubrirse en la sala, donde
+    el rechazo llegaria recien despues de enviar el formulario."""
+    from app.utils.rut import RUTS_BLOQUEADOS
+
+    cuerpo = client.get("/static/js/rut.js").data.decode("utf-8")
+
+    assert "BLOQUEADOS" in cuerpo
+    for rut in RUTS_BLOQUEADOS:
+        assert f'"{rut}"' in cuerpo, f"falta {rut} en rut.js"
+
+
+def test_el_placeholder_no_muestra_un_rut_bloqueado(client, facilitador, app):
+    """Pedirle a alguien que escriba un RUT que despues rechazamos seria un gol
+    en contra. El ejemplo del formulario tiene que ser un RUT aceptable."""
+    from app.utils.rut import es_rut_bloqueado
+
+    codigo = _sesion_abierta(app, facilitador.id, codigo="RUTPLC")
+    html = client.get(f"/sesion/{codigo}/ingreso").data.decode("utf-8")
+
+    for bloqueado in ["12.345.678-5", "11.111.111-1", "22.222.222-2"]:
+        assert bloqueado not in html, bloqueado
+    assert not es_rut_bloqueado("15.432.198-5")

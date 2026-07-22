@@ -27,7 +27,7 @@ from app.models import (
 )
 
 
-RUT_VALIDO = "11.111.111-1"
+RUT_VALIDO = "15.432.198-5"
 
 
 def _crear_eval(app, facilitador_id, n_preguntas=2, umbral=60):

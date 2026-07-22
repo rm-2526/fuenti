@@ -13,8 +13,8 @@ from app.models import Evaluacion, Facilitador, Participante, Pregunta, Alternat
 from app.utils.rut import hash_rut
 
 
-RUT_VALIDO = "11.111.111-1"
-RUT_VALIDO_NORMALIZADO = "111111111"
+RUT_VALIDO = "15.432.198-5"
+RUT_VALIDO_NORMALIZADO = "154321985"
 RUT_INVALIDO = "11.111.111-2"  # DV incorrecto
 
 

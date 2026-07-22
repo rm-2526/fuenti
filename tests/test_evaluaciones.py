@@ -412,7 +412,7 @@ def test_editar_evaluacion_ya_respondida_suelta_enlace_y_conserva_foto(
         alt5 = next(a.id for a in p.alternativas if a.texto == "5")
 
     # El participante responde (elige "5", la incorrecta).
-    client.post("/sesion/EDT999/ingreso", data={"rut": "11.111.111-1", "nombre": "Ana"})
+    client.post("/sesion/EDT999/ingreso", data={"rut": "15.432.198-5", "nombre": "Ana"})
     client.post("/sesion/EDT999/responder", data={f"pregunta_{pid}": alt5})
 
     # Se cierra la sesion para poder editar.

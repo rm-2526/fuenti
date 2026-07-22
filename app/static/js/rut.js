@@ -32,11 +32,28 @@
   // 9 caracteres. Antes de eso, cualquier veredicto es prematuro.
   var LARGO_PLAUSIBLE = 8;
 
+  /* RUT que pasan modulo 11 pero no se aceptan como identidad. ESPEJO de
+   * RUTS_BLOQUEADOS en app/utils/rut.py: si agregas o sacas uno alla, hazlo
+   * tambien aca. El servidor es el que manda —desactivar JavaScript no saltea
+   * el bloqueo—; esto solo evita el viaje de ida y vuelta. */
+  var BLOQUEADOS = [
+    "00",
+    "19",
+    "111111111",
+    "222222222",
+    "333333333",
+    "123456785",
+    "999999999",
+    "444444460",
+  ];
+
   var MENSAJES = {
     formato:
       "El RUT lleva solo numeros y, al final, el digito verificador (0-9 o K).",
     dv:
       "El digito verificador no coincide. Revisa si te falto o te sobro un numero.",
+    bloqueado:
+      "Ese RUT no se acepta: es uno de los que se usan como ejemplo. Ingresa tu RUT real.",
   };
 
   function normalizar(valor) {
@@ -61,7 +78,7 @@
 
   /* Diagnostico, no solo un booleano: distinguir "esto no parece un RUT" de
    * "el DV no calza" permite dar un mensaje util en vez de "RUT invalido".
-   * Devuelve "vacio" | "formato" | "dv" | "ok".
+   * Devuelve "vacio" | "formato" | "dv" | "bloqueado" | "ok".
    */
   function revisar(valor) {
     var rut = normalizar(valor);
@@ -74,14 +91,23 @@
     if (!/^[0-9]+$/.test(cuerpo)) return "formato";
     if (!/^[0-9K]$/.test(dv)) return "formato";
 
-    return dv === dvEsperado(cuerpo) ? "ok" : "dv";
+    if (dv !== dvEsperado(cuerpo)) return "dv";
+
+    /* El bloqueo se evalua al final, sobre un RUT que ya es aritmeticamente
+     * correcto: asi "11.111.111-2" dice "el DV no coincide" (que es lo que le
+     * pasa) y "11.111.111-1" dice "no se acepta". */
+    for (var i = 0; i < BLOQUEADOS.length; i++) {
+      if (rut === BLOQUEADOS[i]) return "bloqueado";
+    }
+
+    return "ok";
   }
 
   function esValido(valor) {
     return revisar(valor) === "ok";
   }
 
-  /* "123456785" -> "12.345.678-5". Si el cuerpo no es numerico lo devuelve
+  /* "154321985" -> "15.432.198-5". Si el cuerpo no es numerico lo devuelve
    * normalizado y sin inventar puntos. */
   function formatear(valor) {
     var rut = normalizar(valor);
@@ -110,7 +136,7 @@
         input.setAttribute("aria-invalid", "false");
         return;
       }
-      if (estado === "formato" || estado === "dv") {
+      if (estado === "formato" || estado === "dv" || estado === "bloqueado") {
         input.classList.add("is-invalid");
         input.setAttribute("aria-invalid", "true");
         if (nodoError) nodoError.textContent = MENSAJES[estado];
@@ -124,7 +150,10 @@
      * da para opinar. exigente=true opina siempre. */
     function evaluar(exigente) {
       var estado = revisar(input.value);
-      if (!exigente && normalizar(input.value).length < LARGO_PLAUSIBLE) {
+      var largo = normalizar(input.value).length;
+      /* El silencio de cortesia mientras escribe no aplica a los bloqueados:
+       * si ya se escribio uno completo, no tiene sentido esperar al blur. */
+      if (!exigente && largo < LARGO_PLAUSIBLE && estado !== "bloqueado") {
         estado = "vacio";
       }
       pintar(estado);

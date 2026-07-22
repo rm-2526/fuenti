@@ -21,7 +21,7 @@ from app.models import Participante, Respuesta, Resultado, Sesion, ahora_utc
 from app.participante import bp
 from app.utils.calificacion import calcular_calificacion
 from app.utils.reporte import foto_de_respuesta
-from app.utils.rut import hash_rut, validar_rut
+from app.utils.rut import es_rut_bloqueado, hash_rut, validar_rut
 
 
 @bp.route("/<codigo>/ingreso", methods=["GET", "POST"])
@@ -150,7 +150,26 @@ def _procesar_ingreso(sesion: Sesion):
         )
 
     if not validar_rut(rut_input):
-        flash("RUT inválido. Revisa el formato (ej: 12.345.678-5).", "danger")
+        flash("RUT inválido. Revisa el formato (ej: 15.432.198-5).", "danger")
+        return render_template(
+            "participante/ingreso.html",
+            sesion=sesion,
+            rut=rut_input,
+            nombre=nombre_input,
+        )
+
+    # Pasa modulo 11 pero no lo aceptamos como identidad (ver RUTS_BLOQUEADOS).
+    # Va DESPUES de validar_rut para que cada rechazo tenga su propio mensaje:
+    # "esta mal escrito" y "no lo aceptamos" son dos cosas distintas y el
+    # participante necesita saber cual le toco. El front adelanta este mismo
+    # rechazo, pero la regla vive aca: un bloqueo que solo existiera en
+    # JavaScript se saltaria desactivando JavaScript.
+    if es_rut_bloqueado(rut_input):
+        flash(
+            "Ese RUT no se acepta: es uno de los que se usan como ejemplo. "
+            "Ingresa tu RUT real.",
+            "danger",
+        )
         return render_template(
             "participante/ingreso.html",
             sesion=sesion,
