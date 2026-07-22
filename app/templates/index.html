@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Fuenti — evaluaciones para capacitación presencial</title>
   <meta name="description"
-        content="Fuenti es la plataforma para tomar evaluaciones en capacitaciones presenciales. El facilitador proyecta un código y cada persona entra con su RUT, sin crear cuenta.">
+        content="Fuenti toma evaluaciones en capacitaciones. Compartes el enlace de la sesión y cada persona entra con su RUT, sin crear cuenta ni instalar nada.">
 
   {# Una sola familia externa (Jost, geometrica y de trazo liviano) y solo tres
      pesos: es lo que carga el look de la referencia. Todo lo demas usa la
@@ -30,6 +30,7 @@
                                   landing a la app no hay salto de color */
       --azul-tinte: #eef4ff;
       --verde:      #1a7f5a;
+      --rojo:       #b4453a;
       --radio:      14px;
       --ancho:      1120px;
       --display:    "Jost", "Segoe UI", system-ui, sans-serif;
@@ -170,67 +171,14 @@
       margin: 0 0 34px;
     }
 
-    /* El campo de codigo es el elemento firma de la pagina: es el objeto real
-       de Fuenti, lo que el facilitador escribe en la pizarra y veinte personas
-       tipean al mismo tiempo. Por eso va en el hero y con cuerpo de display,
-       no escondido en un menu. */
-    .codigo-form {
+    /* Las dos acciones del hero. La principal es entrar: no hay registro
+       publico, las cuentas de facilitador las crea un administrador. */
+    .hero-acciones {
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
-      margin: 0 0 14px;
+      align-items: center;
     }
-
-    .codigo-campo {
-      flex: 1 1 220px;
-      min-width: 0;
-      position: relative;
-    }
-
-    .codigo-input {
-      width: 100%;
-      font-family: var(--mono);
-      font-size: 20px;
-      font-weight: 500;
-      letter-spacing: 0.34em;
-      text-transform: uppercase;
-      color: var(--tinta);
-      background: var(--papel);
-      border: 1px solid var(--linea);
-      border-radius: 999px;
-      padding: 13px 22px;
-      line-height: 1.35;
-      transition: border-color .18s ease, box-shadow .18s ease;
-    }
-    .codigo-input::placeholder {
-      color: #c3c8d4;
-      letter-spacing: 0.34em;
-    }
-    .codigo-input:hover { border-color: #d5d9e2; }
-    .codigo-input:focus {
-      border-color: var(--azul);
-      box-shadow: 0 0 0 4px var(--azul-tinte);
-      outline: none;
-    }
-
-    .pie-campo {
-      font-size: 13.5px;
-      color: var(--tinta-3);
-      margin: 0;
-      max-width: 44ch;
-    }
-
-    .hero-secundario {
-      margin: 26px 0 0;
-      font-size: 14.5px;
-      color: var(--tinta-3);
-    }
-    .hero-secundario a {
-      color: var(--tinta-2);
-      text-decoration-color: var(--linea);
-      text-underline-offset: 3px;
-    }
-    .hero-secundario a:hover { color: var(--azul); }
 
     /* ------------------------------------------------------- mock del hero */
 
@@ -245,8 +193,8 @@
       pointer-events: none;
     }
 
-    /* La "proyeccion": el codigo tal como se ve en la sala. La ilustracion y
-       el campo de la izquierda muestran la misma cosa, a proposito. */
+    /* El informe de la sesion: lo que el facilitador recibe al cerrarla. Es el
+       resultado del producto, no su pantalla de entrada. */
     .pantalla {
       position: absolute;
       left: 4%;
@@ -269,22 +217,52 @@
       margin-bottom: 14px;
     }
 
-    .pantalla-codigo {
+    .pantalla-eval {
       display: block;
-      font-family: var(--mono);
-      font-size: clamp(30px, 4.4vw, 46px);
-      font-weight: 600;
-      letter-spacing: 0.16em;
+      font-family: var(--display);
+      font-size: 19px;
+      font-weight: 400;
       color: var(--tinta);
-      line-height: 1;
-      margin-bottom: 18px;
+      line-height: 1.25;
+      margin-bottom: 6px;
     }
+
+    /* Tres filas del informe: nombre, logro y nota. Es lo que el facilitador
+       recibe al cerrar la sesion, o sea lo que la pagina esta vendiendo. */
+    .informe-fila {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 11px 0;
+      border-bottom: 1px solid var(--linea);
+      font-size: 14.5px;
+    }
+    .informe-nombre { color: var(--tinta); }
+    .informe-cifras {
+      display: flex;
+      align-items: baseline;
+      gap: 13px;
+      flex: none;
+    }
+    .informe-logro {
+      font-size: 13px;
+      color: var(--tinta-3);
+      font-variant-numeric: tabular-nums;
+    }
+    .informe-nota {
+      font-family: var(--mono);
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--verde);
+      font-variant-numeric: tabular-nums;
+    }
+    .informe-nota-bajo { color: var(--rojo); }
 
     .pantalla-pie {
       display: block;
       font-size: 13.5px;
       color: var(--tinta-3);
-      border-top: 1px solid var(--linea);
       padding-top: 14px;
     }
 
@@ -386,7 +364,6 @@
       color: var(--tinta-3);
       max-width: 52ch;
     }
-    .escala-nota strong { color: var(--tinta-2); font-weight: 500; }
 
     /* ----------------------------------------------------------- secciones */
 
@@ -537,7 +514,9 @@
         gap: 52px;
         padding: 32px 0 72px;
       }
-      .mock { aspect-ratio: 1 / 0.78; max-width: 460px; }
+      /* El informe es mas alto que la tarjeta que habia antes: si el mock no
+         crece, los chips flotantes terminan encima de la ultima fila. */
+      .mock { aspect-ratio: 1 / 1.05; max-width: 460px; }
       .split { grid-template-columns: 1fr; gap: 44px; }
       .split-texto { order: -1; }
       .pasos { grid-template-columns: 1fr; gap: 22px; }
@@ -547,13 +526,13 @@
     @media (max-width: 560px) {
       .envoltura { padding: 0 20px; }
       .nav { height: 72px; }
-      .mock { aspect-ratio: 1 / 1.02; }
+      .mock { aspect-ratio: 1 / 1.32; }
       .pantalla { width: 88%; left: 0; top: 14%; padding: 26px 24px 24px; }
       .flotante-alternativa { right: 0; top: 0; }
-      .flotante-nota { left: 0; bottom: 4%; }
+      .flotante-nota { left: 0; bottom: 0; }
       .tarjetas { grid-template-columns: 1fr; }
       .tarjeta-alta { margin-top: 0; }
-      .codigo-form .boton { flex: 1 1 100%; }
+      .hero-acciones .boton { flex: 1 1 100%; }
       .cierre { padding: 76px 0; }
     }
   </style>
@@ -588,35 +567,15 @@
         <h1>Evalúa en la sala.<br>Sin cuentas ni apps.</h1>
 
         <p class="hero-bajada">
-          Fuenti toma evaluaciones en capacitaciones presenciales. Proyectas un
-          código, cada persona entra con su RUT desde su teléfono y ve su nota
-          al terminar.
+          Fuenti toma evaluaciones en capacitaciones. Compartes el enlace de la
+          sesión y cada persona entra con su RUT, responde y ve su nota al
+          terminar.
         </p>
 
-        {# Sin ruta nueva en el backend: el formulario arma la URL de ingreso
-           que ya existe. La base viene de url_for para que siga funcionando si
-           algun dia la app se monta bajo un prefijo. #}
-        <form class="codigo-form" id="form-codigo"
-              data-url-ingreso="{{ url_for('participante.ingreso', codigo='__CODIGO__') }}">
-          <div class="codigo-campo">
-            <label class="oculto-visual" for="codigo">Código de sesión</label>
-            <input class="codigo-input" id="codigo" name="codigo"
-                   placeholder="K7M4PQ" maxlength="6"
-                   autocomplete="off" autocapitalize="characters"
-                   spellcheck="false" required>
-          </div>
-          <button class="boton boton-solido" type="submit">Entrar a la sesión</button>
-        </form>
-
-        <p class="pie-campo">
-          Seis caracteres. No lleva 0, 1, O ni I, para que se pueda dictar en
-          voz alta sin que nadie pregunte dos veces.
-        </p>
-
-        <p class="hero-secundario">
-          ¿Haces la capacitación?
-          <a href="{{ url_for('auth.login') }}">Entra con tu cuenta de facilitador</a>.
-        </p>
+        <div class="hero-acciones">
+          <a class="boton boton-solido" href="{{ url_for('auth.login') }}">Iniciar sesión</a>
+          <a class="boton boton-plano" href="#como-funciona">Ver cómo funciona</a>
+        </div>
       </div>
 
       <div class="mock aparece aparece-2" aria-hidden="true">
@@ -636,9 +595,32 @@
         </div>
 
         <div class="pantalla">
-          <span class="pantalla-etiqueta">Código de sesión</span>
-          <span class="pantalla-codigo">K7M4PQ</span>
-          <span class="pantalla-pie">Prevención de riesgos · 22 personas conectadas</span>
+          <span class="pantalla-etiqueta">Informe de la sesión</span>
+          <span class="pantalla-eval">Prevención de riesgos</span>
+
+          <div class="informe-fila">
+            <span class="informe-nombre">Ana Soto</span>
+            <span class="informe-cifras">
+              <span class="informe-logro">92%</span>
+              <span class="informe-nota">6,5</span>
+            </span>
+          </div>
+          <div class="informe-fila">
+            <span class="informe-nombre">Marco Rojas</span>
+            <span class="informe-cifras">
+              <span class="informe-logro">75%</span>
+              <span class="informe-nota">5,3</span>
+            </span>
+          </div>
+          <div class="informe-fila">
+            <span class="informe-nombre">Luisa Pinto</span>
+            <span class="informe-cifras">
+              <span class="informe-logro">58%</span>
+              <span class="informe-nota informe-nota-bajo">3,8</span>
+            </span>
+          </div>
+
+          <span class="pantalla-pie">22 personas · umbral 60%</span>
         </div>
 
         <div class="flotante flotante-alternativa">
@@ -648,12 +630,12 @@
                     stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </span>
-          Alternativa C
+          18 de 22 aprobados
         </div>
 
         <div class="flotante flotante-nota">
-          <span class="nota-cifra">6,2</span>
-          <span class="nota-texto">85% de logro</span>
+          <span class="nota-cifra">5,8</span>
+          <span class="nota-texto">promedio del grupo</span>
         </div>
       </div>
     </section>
@@ -667,9 +649,7 @@
           <span class="escala-hito escala-hito-7">7,0</span>
         </div>
         <p class="escala-nota">
-          Escala chilena, con el eje donde corresponde: el <strong>4,0</strong>
-          cae exactamente en el umbral de aprobación que el facilitador fija
-          para esa sesión, no en un 60% fijo.
+          Escala con umbral configurable.
         </p>
       </div>
     </section>
@@ -693,15 +673,14 @@
           <div class="paso">
             <h3>Abres una sesión</h3>
             <p>
-              Fuenti genera el código y tú fijas el umbral de aprobación. Lo
-              proyectas o lo escribes en la pizarra.
+              Fuenti genera el código y tú fijas el umbral de aprobación.
             </p>
           </div>
           <div class="paso">
             <h3>Cada persona entra con su RUT</h3>
             <p>
-              Responde desde su teléfono y ve su nota al terminar. Tú ves el
-              informe del grupo apenas cierras la sesión.
+              Responde desde cualquier dispositivo y ve su nota al terminar. Tú
+              recibes el informe del grupo al cerrar la sesión.
             </p>
           </div>
         </div>
@@ -720,8 +699,7 @@
             </div>
             <h3>Informe por persona y del grupo</h3>
             <p>
-              Nota, porcentaje de logro y el desglose pregunta por pregunta,
-              listo para imprimir.
+              Nota, porcentaje de logro y el desglose pregunta por pregunta.
             </p>
           </div>
 
@@ -736,8 +714,7 @@
             </div>
             <h3>El RUT no se guarda</h3>
             <p>
-              Se guarda una huella irreversible. Alcanza para reconocer a la
-              misma persona en otra sesión, y no para saber quién es.
+              Se guarda una huella irreversible, no el número.
             </p>
           </div>
 
@@ -748,10 +725,10 @@
                       stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
               </svg>
             </div>
-            <h3>Lo respondido queda congelado</h3>
+            <h3>Respuestas y resultados consolidados.</h3>
             <p>
               Si editas la evaluación después, los resultados ya rendidos no
-              cambian ni una coma.
+              cambian.
             </p>
           </div>
 
@@ -763,7 +740,7 @@
                       stroke-linejoin="round"/>
               </svg>
             </div>
-            <h3>El umbral es tuyo</h3>
+            <h3>Umbral de aprobación consistente</h3>
             <p>
               Cada sesión guarda la exigencia con que se rindió, aunque después
               la cambies para la siguiente.
@@ -772,74 +749,37 @@
         </div>
 
         <div class="split-texto">
-          <h2 class="seccion-titulo">Pensado para la sala,<br>no para el escritorio.</h2>
+          <h2 class="seccion-titulo">Disponible<br>donde lo necesites.</h2>
           <p>
-            En una capacitación presencial el tiempo es del relator, no del
-            software. Por eso el participante no crea una cuenta, no recibe un
-            correo y no instala nada: escribe seis caracteres y su RUT.
+            Acceso rápido, sin cuentas ni instalación. El participante abre el
+            enlace, escribe su RUT y empieza.
           </p>
           <p>
-            Y como la identidad viaja como huella y no como dato, la misma
-            persona se puede seguir entre una capacitación y la siguiente sin
-            que su RUT quede almacenado en ninguna parte.
+            La continuidad entre capacitaciones se logra mediante una huella
+            irreversible que preserva la privacidad de los participantes.
           </p>
         </div>
       </div>
     </section>
 
     <section class="envoltura cierre">
-      <h2 class="seccion-titulo">¿Tienes un código?</h2>
+      <h2 class="seccion-titulo">¿Dudas?</h2>
       <p class="seccion-bajada">
-        Súbelo arriba y estás dentro. Si eres facilitador, tu panel te espera
-        con las evaluaciones que ya armaste.
+        Las cuentas de facilitador se crean por invitación. Escríbenos y
+        vemos si Fuenti le sirve a tu programa de capacitación.
       </p>
-      <a class="boton boton-solido" href="#codigo" id="ir-al-codigo">Ingresar con un código</a>
+      {# CAMBIAR este correo por el real antes de subir. #}
+      <a class="boton boton-solido" href="mailto:contacto@fuenti.cl">Contáctanos</a>
     </section>
 
   </main>
 
   <footer class="envoltura">
     <div class="pie">
-      <span>Fuenti · Evaluaciones para capacitación presencial</span>
+      <span>Fuenti · Evaluaciones para capacitación</span>
       <a href="{{ url_for('auth.login') }}">Iniciar sesión</a>
     </div>
   </footer>
-
-  <script>
-    /* El formulario no envia nada: arma la URL de ingreso que ya existe y
-       navega. Sin ruta nueva, sin migracion, sin backend que mantener.
-       El codigo se guarda siempre en mayuscula porque la busqueda en la BD es
-       exacta: "k7m4pq" no encontraria la sesion "K7M4PQ". */
-    (function () {
-      var form = document.getElementById("form-codigo");
-      if (!form) return;
-      var campo = document.getElementById("codigo");
-
-      /* Mayuscula mientras escribe. Es seguro hacerlo en cada tecla porque no
-         se agregan ni se quitan caracteres: el cursor no se mueve. */
-      campo.addEventListener("input", function () {
-        var arriba = campo.value.toUpperCase();
-        if (campo.value !== arriba) campo.value = arriba;
-      });
-
-      /* El boton del cierre no solo baja: deja el cursor puesto. Bajar y que
-         la persona tenga que hacer un segundo clic seria dejar el trabajo a
-         medias. */
-      var atajo = document.getElementById("ir-al-codigo");
-      if (atajo) {
-        atajo.addEventListener("click", function () {
-          setTimeout(function () { campo.focus({ preventScroll: true }); }, 420);
-        });
-      }
-
-      form.addEventListener("submit", function (evento) {
-        evento.preventDefault();
-        var codigo = campo.value.trim().toUpperCase();
-        if (!codigo) { campo.focus(); return; }
-        window.location.href = form.dataset.urlIngreso.replace("__CODIGO__", encodeURIComponent(codigo));
-      });
-    })();
-  </script>
 
 </body>
 </html>

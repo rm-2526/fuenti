@@ -1,16 +1,21 @@
 """Tests de la portada.
 
-La portada es la unica pagina que ve alguien que llega sin link directo, y
-tiene dos puertas distintas: el participante que trae un codigo y el
-facilitador que viene a entrar a su panel. Estos tests cuidan que las dos
-sigan ahi, y que el atajo del codigo no se desarme en silencio.
+La portada es publica y apunta a un solo lado: el facilitador. El participante
+NO llega por aca —recibe el enlace directo de su sesion—, y ese es justamente
+el detalle que estos tests cuidan, porque es una decision facil de deshacer sin
+darse cuenta al agregar una seccion nueva.
 """
-
-from app.utils.sesion import _ALFABETO_CODIGO, _LONGITUD_CODIGO
 
 
 def test_la_portada_responde(client):
     resp = client.get("/")
+
+    assert resp.status_code == 200
+
+
+def test_la_portada_es_publica(client):
+    """Nadie llega con cuenta la primera vez: no puede redirigir al login."""
+    resp = client.get("/", follow_redirects=False)
 
     assert resp.status_code == 200
 
@@ -22,40 +27,38 @@ def test_la_portada_ya_no_dice_hola_fuenti(client):
     assert "Hola Fuenti" not in html
 
 
-def test_la_portada_ofrece_las_dos_puertas(client):
-    """Participante con codigo y facilitador con cuenta."""
+def test_la_portada_lleva_al_login(client):
+    """La unica puerta: no hay registro publico, las cuentas de facilitador
+    las crea un administrador."""
     html = client.get("/").data.decode("utf-8")
 
-    assert 'id="form-codigo"' in html   # puerta del participante
-    assert "/login" in html             # puerta del facilitador
+    assert "/login" in html
 
 
-def test_el_formulario_de_codigo_apunta_al_ingreso_real(client):
-    """El atajo arma la URL de participante.ingreso con url_for, no a mano.
-    Si el blueprint cambia de prefijo, esto tiene que seguir calzando."""
+def test_la_portada_no_ofrece_entrar_con_codigo(client):
+    """Decision de producto: el participante llega por el enlace de su sesion,
+    no escribiendo un codigo. Una caja de codigo en la portada prometeria un
+    flujo que la app no tiene."""
     html = client.get("/").data.decode("utf-8")
 
-    assert "/sesion/__CODIGO__/ingreso" in html
+    assert 'id="form-codigo"' not in html
+    assert "__CODIGO__" not in html
 
 
-def test_el_ejemplo_de_codigo_usa_el_alfabeto_real(client):
-    """El codigo de ejemplo no puede llevar caracteres que el generador nunca
-    produce (0, 1, O, I, L): seria ensenarle a leer mal a quien lo dicta."""
+def test_la_portada_no_necesita_javascript(client):
+    """Quedo sin scripts propios. Si vuelve a aparecer uno, que sea a
+    conciencia: es la clase de archivo que despues se cachea viejo."""
     html = client.get("/").data.decode("utf-8")
 
-    inicio = html.index('placeholder="') + len('placeholder="')
-    ejemplo = html[inicio:html.index('"', inicio)]
-
-    assert len(ejemplo) == _LONGITUD_CODIGO
-    for caracter in ejemplo:
-        assert caracter in _ALFABETO_CODIGO, caracter
+    assert "<script" not in html
 
 
-def test_la_portada_no_pide_login(client):
-    """Es publica: nadie llega con cuenta la primera vez."""
-    resp = client.get("/", follow_redirects=False)
+def test_la_portada_ofrece_como_contactar(client):
+    """Sin registro publico, escribir es el unico camino para una cuenta
+    nueva. Si el enlace se rompe, el visitante interesado queda sin salida."""
+    html = client.get("/").data.decode("utf-8")
 
-    assert resp.status_code == 200
+    assert "mailto:" in html
 
 
 def test_facilitador_conectado_ve_el_acceso_al_panel(client, facilitador):
