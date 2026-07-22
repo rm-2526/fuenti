@@ -136,10 +136,45 @@
           ${alternativaVFHtml(preguntaIdx, 0, "Verdadero")}
           ${alternativaVFHtml(preguntaIdx, 1, "Falso")}
         </div>
-        <div class="form-text">Marca cuál es la afirmación correcta.</div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <button type="button" class="btn btn-sm btn-outline-secondary btn-intercambiar-vf">
+            &#8645; Intercambiar
+          </button>
+          <span class="form-text mb-0">
+            Marca cuál es la afirmación correcta. Con "Intercambiar" cambias el
+            orden en que se le muestran las opciones al participante.
+          </span>
+        </div>
       </div>
     `;
     return div;
+  }
+
+  // Intercambia las dos alternativas de una pregunta V/F: se permutan los textos
+  // y TAMBIEN el radio marcado, de modo que la respuesta correcta siga siendo la
+  // misma afirmacion (si "Verdadero" era la correcta, lo sigue siendo despues de
+  // moverse al segundo lugar). Solo cambia el orden en que se presentan.
+  function intercambiarVF(preguntaEl) {
+    const alts = preguntaEl.querySelectorAll(".alternativa");
+    if (alts.length !== 2) return;
+
+    const textos = [
+      alts[0].querySelector('input[type="text"]'),
+      alts[1].querySelector('input[type="text"]'),
+    ];
+    const radios = [
+      alts[0].querySelector('input[type="radio"]'),
+      alts[1].querySelector('input[type="radio"]'),
+    ];
+    if (!textos[0] || !textos[1] || !radios[0] || !radios[1]) return;
+
+    const textoTmp = textos[0].value;
+    textos[0].value = textos[1].value;
+    textos[1].value = textoTmp;
+
+    const marcadoTmp = radios[0].checked;
+    radios[0].checked = radios[1].checked;
+    radios[1].checked = marcadoTmp;
   }
 
   function renumerarTitulos() {
@@ -191,6 +226,11 @@
         return;
       }
       t.closest(".alternativa").remove();
+      return;
+    }
+
+    if (t.classList.contains("btn-intercambiar-vf")) {
+      intercambiarVF(t.closest(".pregunta"));
       return;
     }
 

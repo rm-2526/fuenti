@@ -65,7 +65,15 @@
               {% endfor %}
             </div>
             {% if es_vf %}
-            <div class="form-text">Marca cuál es la afirmación correcta.</div>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <button type="button" class="btn btn-sm btn-outline-secondary btn-intercambiar-vf">
+                ⇅ Intercambiar
+              </button>
+              <span class="form-text mb-0">
+                Marca cuál es la afirmación correcta. Con "Intercambiar" cambias
+                el orden en que se le muestran las opciones al participante.
+              </span>
+            </div>
             {% else %}
             <button type="button" class="btn btn-sm btn-outline-primary btn-agregar-alternativa mt-2">
               + Agregar alternativa

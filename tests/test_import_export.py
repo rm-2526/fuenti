@@ -384,3 +384,115 @@ def test_biblioteca_muestra_botones_importar_exportar(client, app, facilitador):
     assert resp.status_code == 200
     assert b"Importar" in resp.data
     assert b"Exportar" in resp.data
+
+
+# -------------------- Orden de las alternativas en V/F --------------------
+# Desde que el orden de una V/F es elegible (para que la primera opcion no sea
+# siempre "Verdadero"), el texto del JSON decide el orden y ya no solo la
+# posicion. Si los textos no se reconocen, se mantiene el comportamiento
+# historico: primera = Verdadero.
+
+def _vf(primero, segundo, correcta_primero=True, enunciado="Afirmación."):
+    return {"preguntas": [{
+        "enunciado": enunciado,
+        "tipo": "verdadero_falso",
+        "alternativas": [
+            {"texto": primero, "es_correcta": correcta_primero},
+            {"texto": segundo, "es_correcta": not correcta_primero},
+        ],
+    }]}
+
+
+def _alts_de_la_unica_pregunta(titulo):
+    ev = db.session.query(Evaluacion).filter_by(titulo=titulo).one()
+    pregunta = ev.preguntas[0]
+    return sorted(pregunta.alternativas, key=lambda a: a.orden)
+
+
+def test_importar_vf_respeta_falso_primero(client, app, facilitador):
+    """Si el JSON pone "Falso" primero, así queda guardado."""
+    _login(client)
+    _subir(client, _vf("Falso", "Verdadero"), titulo="VF invertida")
+    with app.app_context():
+        alts = _alts_de_la_unica_pregunta("VF invertida")
+        assert [a.texto for a in alts] == ["Falso", "Verdadero"]
+        assert alts[0].es_correcta is True   # Falso, que es la marcada
+        assert alts[1].es_correcta is False
+
+
+def test_importar_vf_respeta_verdadero_primero(client, app, facilitador):
+    """El orden clásico sigue funcionando igual que antes."""
+    _login(client)
+    _subir(client, _vf("Verdadero", "Falso", correcta_primero=False),
+           titulo="VF clásica")
+    with app.app_context():
+        alts = _alts_de_la_unica_pregunta("VF clásica")
+        assert [a.texto for a in alts] == ["Verdadero", "Falso"]
+        assert alts[0].es_correcta is False
+        assert alts[1].es_correcta is True   # Falso
+
+
+def test_importar_vf_tolera_mayusculas_tildes_y_espacios(client, app, facilitador):
+    """"  FALSO " se reconoce como Falso y se guarda con el texto canónico."""
+    _login(client)
+    _subir(client, _vf("  FALSO ", "verdadero"), titulo="VF sucia")
+    with app.app_context():
+        alts = _alts_de_la_unica_pregunta("VF sucia")
+        assert [a.texto for a in alts] == ["Falso", "Verdadero"]
+        assert alts[0].es_correcta is True
+
+
+def test_importar_vf_texto_no_reconocido_usa_el_orden(client, app, facilitador):
+    """Compatibilidad: si los textos no son Verdadero/Falso, la app los fija por
+    posición (primera = Verdadero), igual que antes de permitir el intercambio.
+    La alternativa marcada sigue siendo la correcta."""
+    _login(client)
+    _subir(client, _vf("sí", "no", correcta_primero=False), titulo="VF rara")
+    with app.app_context():
+        alts = _alts_de_la_unica_pregunta("VF rara")
+        assert [a.texto for a in alts] == ["Verdadero", "Falso"]
+        assert alts[0].es_correcta is False
+        assert alts[1].es_correcta is True
+
+
+def test_importar_vf_textos_repetidos_usa_el_orden(client, app, facilitador):
+    """Dos "Verdadero" no son un orden válido: se cae al comportamiento por
+    posición en vez de guardar la pregunta rota."""
+    _login(client)
+    _subir(client, _vf("Verdadero", "Verdadero"), titulo="VF repetida")
+    with app.app_context():
+        alts = _alts_de_la_unica_pregunta("VF repetida")
+        assert [a.texto for a in alts] == ["Verdadero", "Falso"]
+
+
+def test_vista_previa_muestra_el_orden_real_de_la_vf(client, facilitador):
+    """La previa muestra "Falso" antes que "Verdadero" cuando así se importará:
+    lo que se ve es lo que se creará."""
+    _login(client)
+    cuerpo = _previsualizar(client, _vf("Falso", "Verdadero")).get_data(as_text=True)
+    # La etiqueta del tipo ("Verdadero / Falso") y la documentación de la página
+    # también contienen las palabras: comparamos solo dentro del desglose, que
+    # empieza justo después de esa etiqueta.
+    desglose = cuerpo.split("Verdadero / Falso", 1)[1]
+    assert desglose.index("Falso") < desglose.index("Verdadero")
+
+
+def test_exportar_e_importar_conserva_el_orden_invertido(client, app, facilitador):
+    """Ida y vuelta completa: una V/F con Falso primero se exporta y se vuelve a
+    importar en el mismo orden."""
+    _login(client)
+    _subir(client, _vf("Falso", "Verdadero"), titulo="Origen invertido")
+    with app.app_context():
+        ev_id = db.session.query(Evaluacion).filter_by(titulo="Origen invertido").one().id
+
+    exportado = client.get(f"/evaluaciones/{ev_id}/exportar.json").data
+    datos = json.loads(exportado.decode("utf-8"))
+    assert [a["texto"] for a in datos["preguntas"][0]["alternativas"]] == [
+        "Falso", "Verdadero"
+    ]
+
+    _subir(client, exportado, titulo="Copia invertida")
+    with app.app_context():
+        alts = _alts_de_la_unica_pregunta("Copia invertida")
+        assert [a.texto for a in alts] == ["Falso", "Verdadero"]
+        assert alts[0].es_correcta is True

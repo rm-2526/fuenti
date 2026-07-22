@@ -473,9 +473,11 @@ def _matriz_de_sesion(evaluacion, sesion):
         correcta_letra = "·"
         es_vf = pregunta.tipo == "verdadero_falso"
         for alt in pregunta.alternativas:
-            # V/F muestra V/F (por orden: 1=V, 2=F); opción múltiple, A/B/C…
+            # V/F muestra V/F; opción múltiple, A/B/C… La letra de una V/F sale
+            # del TEXTO y no del orden, porque desde que se puede dejar "Falso"
+            # en primer lugar la posición ya no dice cuál es cuál.
             if es_vf:
-                letra = "V" if alt.orden == 1 else "F"
+                letra = "F" if _normalizar_vf(alt.texto) == "Falso" else "V"
             else:
                 letra = chr(64 + alt.orden)  # 1 -> A, 2 -> B, …
             mapa[alt.texto] = letra
@@ -794,9 +796,54 @@ def _crear_evaluacion():
     return redirect(url_for("evaluaciones.listado"))
 
 
+# Textos canonicos de una pregunta Verdadero/Falso. La app NUNCA guarda otra
+# cosa en una alternativa V/F: o es "Verdadero" o es "Falso".
+_CANONICOS_VF = {"verdadero": "Verdadero", "falso": "Falso"}
+
+
+def _normalizar_vf(texto):
+    """Mapea el texto de una alternativa V/F a su forma canonica.
+
+    Devuelve "Verdadero", "Falso", o None si el texto no se reconoce. Ignora
+    mayusculas, espacios y tildes, para que "  verdadero " o "FALSO" tambien
+    sirvan (util al importar JSON escrito a mano o generado por una IA).
+    """
+    base = (
+        unicodedata.normalize("NFKD", (texto or "").strip())
+        .encode("ascii", "ignore")
+        .decode("ascii")
+        .lower()
+    )
+    return _CANONICOS_VF.get(base)
+
+
+def _textos_vf(alternativas):
+    """Decide el texto definitivo de cada alternativa de una pregunta V/F.
+
+    `alternativas` es la lista [(j, texto)] ya parseada. Devuelve {j: texto}.
+
+    Si las dos alternativas traen textos reconocibles y distintos ("Verdadero" y
+    "Falso", en cualquier orden), se RESPETA ese orden: asi el facilitador puede
+    dejar "Falso" en primer lugar y la primera opcion no es siempre la verdadera.
+
+    En cualquier otro caso (textos vacios, "V"/"F", basura de un POST manipulado)
+    se cae al comportamiento historico: la primera es "Verdadero" y la segunda
+    "Falso". Por eso la app nunca guarda un texto raro en una V/F, venga de donde
+    venga, y las evaluaciones anteriores se comportan exactamente igual que antes.
+    """
+    canonicos = [(j, _normalizar_vf(t)) for j, t in alternativas]
+    valores = [c for _, c in canonicos]
+    if len(valores) == 2 and None not in valores and valores[0] != valores[1]:
+        return dict(canonicos)
+    return {
+        j: ("Verdadero" if pos == 1 else "Falso")
+        for pos, (j, _) in enumerate(alternativas, start=1)
+    }
+
+
 def _insertar_preguntas(evaluacion_id, preguntas):
     """Crea las Pregunta/Alternativa de una evaluacion a partir de la lista ya
-    parseada y validada. Compartido por crear y editar.
+    parseada y validada. Compartido por crear, editar e importar.
 
     `preguntas` es la salida de _parsear_preguntas: lista de dicts con
     {enunciado, correcta, alternativas: [(j, texto)]}.
@@ -812,14 +859,15 @@ def _insertar_preguntas(evaluacion_id, preguntas):
         db.session.add(pregunta)
         db.session.flush()
 
+        # En Verdadero/Falso el texto no se guarda tal cual: pasa por _textos_vf,
+        # que respeta el orden elegido si viene explicito y si no lo fija por
+        # posicion. La alternativa correcta la sigue marcando el indice elegido.
+        textos_vf = _textos_vf(p["alternativas"]) if tipo == "verdadero_falso" else None
+
         correcta_idx = int(p["correcta"])
         for orden_a, (j, texto) in enumerate(p["alternativas"], start=1):
-            # En Verdadero/Falso el texto NO se toma del formulario: se fija por
-            # orden (1=Verdadero, 2=Falso). Así la foto congelada queda correcta
-            # aunque el POST viniera manipulado. La alternativa correcta la sigue
-            # marcando el índice elegido.
-            if tipo == "verdadero_falso":
-                texto = "Verdadero" if orden_a == 1 else "Falso"
+            if textos_vf is not None:
+                texto = textos_vf[j]
             alternativa = Alternativa(
                 pregunta_id=pregunta.id,
                 texto=texto,
@@ -840,7 +888,8 @@ def _evaluacion_a_dict(evaluacion) -> dict:
     """Serializa una evaluacion al formato JSON de exportacion.
 
     No incluye ids internos ni el dueno: el archivo es portable. El orden de
-    preguntas y alternativas se respeta (la primera V/F sigue siendo Verdadero).
+    preguntas y alternativas se respeta, asi que una V/F que quedo con "Falso"
+    en primer lugar se exporta e importa de vuelta en ese mismo orden.
     """
     return {
         "formato": "fuenti.evaluacion",
@@ -924,8 +973,9 @@ def _json_a_preguntas(data):
             pares.append((texto.strip(), es_correcta))
 
         # En opcion multiple, las alternativas sin texto se descartan (igual que
-        # en el formulario). En V/F el texto se ignora (lo fija la app por orden),
-        # asi que no se descarta: deben venir las 2.
+        # en el formulario). En V/F no se descartan: deben venir las 2, y su
+        # texto SI importa, porque decide el orden ("Falso" puede ir primero).
+        # Lo que no se reconozca lo normaliza _textos_vf al insertar.
         if tipo == "opcion_multiple":
             pares = [(t, c) for (t, c) in pares if t]
 
@@ -962,8 +1012,8 @@ def _json_a_preguntas(data):
 def _vista_previa(preguntas):
     """Arma el desglose legible para la vista previa a partir de las preguntas ya
     parseadas y validadas. Muestra los textos TAL COMO quedaran al crear: para
-    las V/F normaliza a "Verdadero"/"Falso" por orden (igual que la app), y marca
-    cual alternativa es la correcta.
+    las V/F pasa por _textos_vf (el mismo helper que usa _insertar_preguntas), de
+    modo que la previa refleja el orden real, incluido "Falso" en primer lugar.
     """
     etiquetas = {
         "opcion_multiple": "Opción múltiple",
@@ -972,9 +1022,10 @@ def _vista_previa(preguntas):
     vista = []
     for p in preguntas:
         es_vf = p["tipo"] == "verdadero_falso"
+        textos_vf = _textos_vf(p["alternativas"]) if es_vf else None
         alternativas = []
-        for pos, (j, texto) in enumerate(p["alternativas"], start=1):
-            display = ("Verdadero" if pos == 1 else "Falso") if es_vf else texto
+        for j, texto in p["alternativas"]:
+            display = textos_vf[j] if textos_vf is not None else texto
             alternativas.append(
                 {"texto": display, "correcta": str(j) == str(p["correcta"])}
             )

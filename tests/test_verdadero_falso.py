@@ -214,3 +214,109 @@ def test_matriz_muestra_letras_vf(client, facilitador, app):
     assert "V \u2713" in cuerpo         # celda: V (Verdadero) con ✓
     assert "correcta: V" in cuerpo      # encabezado marca la correcta como V
     assert "A \u2713" not in cuerpo     # NO se usa la letra A para una V/F
+
+
+# ----------------------- Orden elegible de la V/F -----------------------
+# El facilitador puede intercambiar Verdadero y Falso para que la primera opcion
+# no sea siempre la verdadera. El boton "Intercambiar" del formulario permuta los
+# textos y el radio marcado; el backend guarda ese orden tal cual.
+
+def test_crear_vf_con_falso_primero_guarda_ese_orden(client, facilitador, app):
+    _login(client)
+    data = {
+        "titulo": "VF invertida",
+        "umbral": "60",
+        "pregunta_0_enunciado": "La Luna es una estrella.",
+        "pregunta_0_tipo": "verdadero_falso",
+        "pregunta_0_correcta": "0",             # la primera, que ahora es Falso
+        "pregunta_0_alternativa_0_texto": "Falso",
+        "pregunta_0_alternativa_1_texto": "Verdadero",
+    }
+    resp = client.post("/evaluaciones/nueva", data=data, follow_redirects=True)
+    assert resp.status_code == 200
+
+    with app.app_context():
+        q = (
+            db.session.query(Pregunta)
+            .filter_by(enunciado="La Luna es una estrella.")
+            .one()
+        )
+        alts = sorted(q.alternativas, key=lambda a: a.orden)
+        assert [a.texto for a in alts] == ["Falso", "Verdadero"]
+        assert alts[0].es_correcta is True    # Falso
+        assert alts[1].es_correcta is False   # Verdadero
+
+
+def test_editar_precarga_conserva_el_orden_invertido(client, facilitador, app):
+    """Al editar, el formulario vuelve a mostrar Falso primero (no lo reordena)."""
+    with app.app_context():
+        e = Evaluacion(
+            facilitador_id=facilitador.id, titulo="Editar invertida", umbral_aprobacion=60
+        )
+        db.session.add(e)
+        db.session.flush()
+        q = Pregunta(
+            evaluacion_id=e.id, enunciado="Afirmación.", orden=1, tipo="verdadero_falso"
+        )
+        db.session.add(q)
+        db.session.flush()
+        db.session.add_all([
+            Alternativa(pregunta_id=q.id, texto="Falso", es_correcta=True, orden=1),
+            Alternativa(pregunta_id=q.id, texto="Verdadero", es_correcta=False, orden=2),
+        ])
+        db.session.commit()
+        eval_id = e.id
+
+    _login(client)
+    cuerpo = client.get(f"/evaluaciones/{eval_id}/editar").get_data(as_text=True)
+    assert 'value="Falso"' in cuerpo
+    assert cuerpo.index('value="Falso"') < cuerpo.index('value="Verdadero"')
+    assert "btn-intercambiar-vf" in cuerpo   # el botón de intercambio está
+
+
+def test_matriz_usa_el_texto_y_no_la_posicion(client, facilitador, app):
+    """Con "Falso" en primer lugar, la matriz debe mostrar F (no V): la letra
+    sale del texto de la alternativa, no de su orden."""
+    with app.app_context():
+        e = Evaluacion(
+            facilitador_id=facilitador.id, titulo="Matriz invertida", umbral_aprobacion=60
+        )
+        db.session.add(e)
+        db.session.flush()
+        q = Pregunta(
+            evaluacion_id=e.id, enunciado="La Luna es una estrella.",
+            orden=1, tipo="verdadero_falso",
+        )
+        db.session.add(q)
+        db.session.flush()
+        db.session.add_all([
+            Alternativa(pregunta_id=q.id, texto="Falso", es_correcta=True, orden=1),
+            Alternativa(pregunta_id=q.id, texto="Verdadero", es_correcta=False, orden=2),
+        ])
+        s = Sesion(
+            evaluacion_id=e.id, codigo="VFINV", estado="cerrada", umbral_aprobacion=60
+        )
+        db.session.add(s)
+        db.session.flush()
+        p = Participante(sesion_id=s.id, identificador_hash="hash_inv", nombre="Ana Soto")
+        db.session.add(p)
+        db.session.flush()
+        db.session.add(Respuesta(
+            participante_id=p.id, enunciado_texto="La Luna es una estrella.",
+            elegida_texto="Falso", correcta_texto="Falso", acerto=True, orden=1,
+        ))
+        db.session.add(Resultado(
+            participante_id=p.id, puntaje=1, total_preguntas=1,
+            porcentaje=100.0, nota=7.0, aprobado=True,
+        ))
+        db.session.commit()
+        eval_id, sesion_id = e.id, s.id
+
+    _login(client)
+    cuerpo = client.get(
+        f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/informe-todos"
+    ).get_data(as_text=True)
+
+    assert "F \u2713" in cuerpo        # respondió Falso, que estaba primera
+    assert "correcta: F" in cuerpo    # y la correcta es F, no V
+    assert "V \u2713" not in cuerpo

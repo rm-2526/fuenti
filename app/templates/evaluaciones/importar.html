@@ -97,11 +97,11 @@
       ]
     },
     {
-      "enunciado": "El Sol es una estrella.",
+      "enunciado": "La Luna es una estrella.",
       "tipo": "verdadero_falso",
       "alternativas": [
-        { "texto": "Verdadero", "es_correcta": true },
-        { "texto": "Falso", "es_correcta": false }
+        { "texto": "Falso", "es_correcta": true },
+        { "texto": "Verdadero", "es_correcta": false }
       ]
     }
   ]
@@ -117,9 +117,14 @@
         <code>"verdadero_falso"</code> (exactamente 2).</li>
       <li>En cada pregunta, <strong>una sola</strong> alternativa tiene
         <code>"es_correcta": true</code>.</li>
-      <li>En las <code>verdadero_falso</code>, la primera alternativa representa
-        "Verdadero" y la segunda "Falso" (el texto lo fija la app). Marca como
-        correcta la que corresponda: puede ser cualquiera de las dos.</li>
+      <li>En las <code>verdadero_falso</code>, escribe los textos
+        <code>"Verdadero"</code> y <code>"Falso"</code>: se <strong>respeta el
+        orden</strong> en que los pongas, así que puedes dejar "Falso" en primer
+        lugar. Si el texto no se reconoce, la app usa la primera como
+        "Verdadero" y la segunda como "Falso".</li>
+      <li>Marca como correcta la que corresponda: puede ser cualquiera de las
+        dos. Usa la <strong>vista previa</strong> para confirmar el orden antes
+        de importar.</li>
     </ul>
   </div>
 </div>
@@ -136,7 +141,18 @@ Responde únicamente con el JSON, sin explicaciones ni texto adicional, con esta
 { "preguntas": [ { "enunciado": "...", "tipo": "opcion_multiple" | "verdadero_falso",
   "alternativas": [ { "texto": "...", "es_correcta": true|false } ] } ] }
 Reglas: cada pregunta debe tener exactamente UNA alternativa con es_correcta=true;
-opcion_multiple lleva de 2 a 6 alternativas; verdadero_falso lleva exactamente 2
-(la primera representa "Verdadero" y la segunda "Falso"), y marcas como correcta
-la que corresponda. Idioma: español.{% endraw %}</code></pre>
+opcion_multiple lleva de 2 a 6 alternativas; verdadero_falso lleva exactamente 2,
+con los textos "Verdadero" y "Falso", y marcas como correcta la que corresponda.
+Idioma: español.
+Importante, sobre la posición de la respuesta correcta:
+- En las preguntas opcion_multiple NO dejes la alternativa correcta siempre en
+  primer lugar. Varía su posición de una pregunta a otra y repártela de forma
+  pareja entre todas las posiciones disponibles.
+- En las preguntas verdadero_falso redacta aproximadamente la mitad de las
+  afirmaciones como falsas, para que la respuesta correcta no sea siempre
+  "Verdadero".
+- Además, en las verdadero_falso alterna el orden de las alternativas: en unas
+  pon "Verdadero" primero y en otras "Falso" primero.
+- Antes de entregar el JSON revisa el conjunto completo y reordena si la
+  alternativa correcta quedó demasiadas veces en la misma posición.{% endraw %}</code></pre>
 {% endblock %}
