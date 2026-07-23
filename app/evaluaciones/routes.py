@@ -23,6 +23,7 @@ from app import db, hora_local
 from app.evaluaciones import bp
 from app.models import Alternativa, Evaluacion, Participante, Pregunta, Resultado, Sesion
 from app.utils.sesion import generar_codigo_sesion
+from app.utils.qr import svg_de_enlace
 from app.utils.estadisticas import resumir_resultados
 from app.utils.reporte import (
     ENCABEZADOS_CSV,
@@ -391,12 +392,24 @@ def detalle_sesion(eval_id, sesion_id):
         )
     resumen = _resumen_de_sesion(sesion)
     participantes = filas_informe_sesion(_participantes_ordenados(sesion))
+
+    # QR del mismo enlace que se muestra al lado, para que el participante entre
+    # escaneando en vez de tipear. Se arma aca (y no en la plantilla) para que
+    # la plantilla solo pinte. Llegar hasta esta linea ya garantiza que la
+    # sesion esta abierta: mas arriba se redirige si no lo esta.
+    enlace_ingreso = url_for(
+        "participante.ingreso", codigo=sesion.codigo, _external=True
+    )
+    qr_ingreso = svg_de_enlace(enlace_ingreso)
+
     return render_template(
         "evaluaciones/detalle_sesion.html",
         evaluacion=evaluacion,
         sesion=sesion,
         resumen=resumen,
         participantes=participantes,
+        enlace_ingreso=enlace_ingreso,
+        qr_ingreso=qr_ingreso,
     )
 
 

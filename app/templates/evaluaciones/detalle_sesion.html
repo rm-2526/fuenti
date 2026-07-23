@@ -11,6 +11,11 @@
     .no-print { display: none !important; }
     body { background: #fff !important; }
   }
+
+  /* El QR se genera a 148 px y el CSS lo deja en 130: chico, nítido y sin
+     robarle espacio al panel. El SVG escala sin perder definición. */
+  .qr-sesion { flex: none; line-height: 0; }
+  .qr-sesion svg { width: 130px; height: 130px; display: block; }
 </style>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -84,7 +89,7 @@
             <input type="text"
                    class="form-control font-monospace"
                    id="link-participante"
-                   value="{{ url_for('participante.ingreso', codigo=sesion.codigo, _external=True) }}"
+                   value="{{ enlace_ingreso }}"
                    readonly>
             <button class="btn btn-outline-secondary"
                     type="button"
@@ -92,6 +97,23 @@
               Copiar
             </button>
           </div>
+
+          {# El QR apunta al MISMO enlace de arriba: quien tenga la cámara a mano
+             escanea, quien prefiera el link lo copia. No tiene vencimiento
+             propio; al cerrar la sesión, el enlace deja de aceptar ingresos y
+             el QR con él.
+             El SVG viene armado desde la ruta (app/utils/qr.py) y se marca
+             |safe: no es entrada del usuario, lo genera segno a partir de una
+             URL que construye la propia app. #}
+          <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="qr-sesion border rounded p-2 bg-white">
+              {{ qr_ingreso | safe }}
+            </div>
+            <p class="text-muted small mb-0">
+              También pueden entrar escaneando este código.
+            </p>
+          </div>
+
           <p class="text-muted small">
             Comparte este link con los participantes. Cada uno ingresará con su RUT.
           </p>
