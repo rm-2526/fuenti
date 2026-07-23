@@ -125,12 +125,12 @@
 
 <h2 class="h5 mt-4">¿No tienes las preguntas? Genéralas con una IA</h2>
 <p class="mb-2">Con el siguiente prompt puedes generar, en cualquier asistente
-(ChatGPT, Claude, Gemini…), un JSON con preguntas de selección múltiple y de
+(ChatGPT, Claude, Gemini…), un JSON con preguntas de selección única y de
 verdadero/falso. Reemplaza el tema y la cantidad, y pega el resultado en el
 cuadro de arriba:</p>
 <pre class="bg-light border rounded p-3 overflow-auto"><code>{% raw %}Quiero un conjunto de preguntas para una evaluación.
 Tema: [ingresa el tema; ej: seguridad en el laboratorio].
-Cantidad: [ingresa la cantidad; ej: 5] preguntas, combinando preguntas de selección múltiple y de verdadero/falso.
+Cantidad: [ingresa la cantidad; ej: 5] preguntas, combinando preguntas de selección única y de verdadero/falso.
 Responde únicamente con el JSON, sin explicaciones ni texto adicional, con esta estructura:
 { "preguntas": [ { "enunciado": "...", "tipo": "opcion_multiple" | "verdadero_falso",
   "alternativas": [ { "texto": "...", "es_correcta": true|false } ] } ] }
@@ -140,7 +140,7 @@ con los textos "Verdadero" y "Falso", y marcas como correcta la que corresponda.
 Idioma: español.
 Importante, sobre el orden:
 - Intercala los dos tipos a lo largo del listado: NO pongas primero todas las de
-  selección múltiple y después todas las de verdadero/falso. Que se vayan
+  selección única y después todas las de verdadero/falso. Que se vayan
   alternando sin un patrón fijo, empezando indistintamente por cualquiera de los dos.
 - En las preguntas opcion_multiple NO dejes la alternativa correcta siempre en
   primer lugar. Varía su posición de una pregunta a otra y repártela de forma
