@@ -22,15 +22,27 @@ import segno
 # codigo se vea algo sucio o torcido sin inflar el tamano del simbolo.
 _CORRECCION = "m"
 
-# Pixeles por modulo. Con el largo de URL de Fuenti el simbolo queda de 37x37
-# modulos, asi que scale=4 da ~148 px: suficiente para escanear de cerca y sin
-# ocupar media pantalla. El tamano final igual lo ajusta el CSS, porque el SVG
-# escala sin perder nitidez.
+# Pixeles por modulo. Con el largo de URL de Fuenti la matriz queda de 33x33
+# modulos; sumando el borde son 41, asi que scale=4 da 164 px.
+#
+# IMPORTANTE: este es el tamano FINAL con el que se muestra. El SVG NO se
+# reescala por CSS.
+#
+# Por que: segno dibuja el QR con trazos (stroke), no con rectangulos. Si el
+# navegador lo achica a un tamano que no es multiplo exacto (por ejemplo de 180
+# a 130 px), el antialiasing difumina el borde de cada modulo y el patron queda
+# ambiguo: se ve bien a la vista, pero la camara NO lo lee. Fue exactamente el
+# bug de la primera version. Verificado en navegador: a tamano nativo lee
+# siempre; con reescalado CSS no lee nunca.
+#
+# Si hay que cambiar el tamano, se cambia ESTA constante, nunca con CSS.
 _ESCALA = 4
 
-# Margen blanco alrededor, en modulos. El estandar pide 4; con 2 se ve mas
-# compacto y los lectores actuales no tienen problema.
-_BORDE = 2
+# Margen blanco alrededor, en modulos. El estandar (ISO 18004) pide 4 y aca se
+# respeta: es la "zona de silencio" que el lector necesita para encontrar el
+# simbolo. La primera version usaba 2 "porque los lectores actuales no tienen
+# problema", que era una suposicion sin probar.
+_BORDE = 4
 
 
 def svg_de_enlace(enlace: str) -> str:

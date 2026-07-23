@@ -12,10 +12,17 @@
     body { background: #fff !important; }
   }
 
-  /* El QR se genera a 148 px y el CSS lo deja en 130: chico, nítido y sin
-     robarle espacio al panel. El SVG escala sin perder definición. */
+  /* El QR se muestra al tamaño con que se generó (164 px, ver app/utils/qr.py).
+     NO se le pone width/height acá: achicarlo por CSS difumina el borde de cada
+     módulo y la cámara deja de leerlo. Para cambiar el tamaño, se cambia la
+     escala en qr.py.
+
+     shape-rendering:crispEdges apaga el suavizado. Sin esto, basta con que el
+     SVG caiga en una posición fraccionaria de píxel para que el navegador
+     difumine cada módulo y el código se vuelva ilegible para la cámara, aunque
+     a la vista se vea perfecto. */
   .qr-sesion { flex: none; line-height: 0; }
-  .qr-sesion svg { width: 130px; height: 130px; display: block; }
+  .qr-sesion svg { display: block; shape-rendering: crispEdges; }
 </style>
 
 <div class="d-flex justify-content-between align-items-center mb-3">

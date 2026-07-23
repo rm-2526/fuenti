@@ -7,9 +7,11 @@ ingresos. Si alguna vez el QR quedara apuntando a otra parte, o sobreviviera al
 cierre de la sesion, seria un codigo pegado en una pared que manda a la nada.
 """
 
+import pathlib
+
 from app import db
 from app.models import Alternativa, Evaluacion, Pregunta, Sesion
-from app.utils.qr import svg_de_enlace
+from app.utils.qr import _BORDE, svg_de_enlace
 
 
 def _login(client, facilitador):
@@ -150,3 +152,45 @@ def test_otro_facilitador_no_ve_el_qr_de_una_sesion_ajena(client, facilitador, a
     resp = client.get(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}")
 
     assert resp.status_code == 403
+
+
+# === Que el QR se pueda ESCANEAR, no solo que exista ===
+# Los tres de abajo cuidan lo que rompio la primera version: se veia perfecto en
+# pantalla y ninguna camara lo leia.
+
+def test_respeta_la_zona_de_silencio():
+    """El margen blanco alrededor (4 modulos, ISO 18004) es lo que permite al
+    lector encontrar el simbolo. La primera version usaba 2 y no habia forma de
+    notarlo mirando la pantalla."""
+    assert _BORDE >= 4
+
+
+def test_el_svg_trae_su_tamano_explicito():
+    """El SVG tiene que declarar width/height y mostrarse ASI. Si llegara sin
+    tamano propio, la hoja de estilos tendria que ponerselo, y ahi empieza el
+    problema del test siguiente."""
+    svg = svg_de_enlace("https://ejemplo.cl/sesion/K7M4PQ/ingreso")
+
+    assert 'width="' in svg
+    assert 'height="' in svg
+
+
+def test_la_plantilla_no_reescala_el_qr_por_css():
+    """EL BUG DE LA PRIMERA VERSION: el SVG se generaba a 148 px y el CSS lo
+    achicaba a 130. Como segno dibuja con trazos, ese reescalado difumina el
+    borde de cada modulo; a la vista se ve bien y la camara no lo lee.
+
+    El tamano se cambia en app/utils/qr.py (_ESCALA), NUNCA con width/height en
+    el CSS. Este test lee la plantilla para que nadie lo reintroduzca sin
+    enterarse.
+    """
+    plantilla = (
+        pathlib.Path(__file__).resolve().parents[1]
+        / "app" / "templates" / "evaluaciones" / "detalle_sesion.html"
+    ).read_text(encoding="utf-8")
+
+    inicio = plantilla.index(".qr-sesion svg")
+    regla = plantilla[inicio:plantilla.index("}", inicio)]
+
+    assert "width" not in regla, f"el CSS reescala el QR: {regla.strip()}"
+    assert "height" not in regla, f"el CSS reescala el QR: {regla.strip()}"
