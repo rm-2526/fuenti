@@ -11,7 +11,7 @@
 {% if vista_previa %}
 <div class="card card-body mb-4 border-info">
   <h2 class="h5 mb-1">
-    Vista previa — {{ vista_previa|length }}
+    Vista previa - {{ vista_previa|length }}
     pregunta{{ 's' if vista_previa|length != 1 else '' }}
   </h2>
   <p class="text-muted small mb-3">
@@ -84,7 +84,7 @@
   <!-- Derecha: formato y reglas -->
   <div class="col-lg-5">
     <h2 class="h5">Formato del JSON</h2>
-    <p class="mb-2">El JSON debe contener solo las preguntas, con esta
+    <p class="mb-2">El JSON debe contener las preguntas y alternativas, con esta
     estructura:</p>
     <pre class="bg-light border rounded p-3 overflow-auto"><code>{% raw %}{
   "preguntas": [
@@ -109,8 +109,6 @@
 
     <h2 class="h5 mt-3">Reglas para que el JSON sea válido</h2>
     <ul class="mb-0">
-      <li>El <strong>título</strong> y el <strong>umbral</strong> se escriben en
-        el formulario, no en el JSON.</li>
       <li>El JSON lleva una lista <code>preguntas</code> con al menos una.</li>
       <li>Cada pregunta lleva <code>enunciado</code> y un <code>tipo</code>:
         <code>"opcion_multiple"</code> (de 2 a 6 alternativas) o
@@ -120,11 +118,7 @@
       <li>En las <code>verdadero_falso</code>, escribe los textos
         <code>"Verdadero"</code> y <code>"Falso"</code>: se <strong>respeta el
         orden</strong> en que los pongas, así que puedes dejar "Falso" en primer
-        lugar. Si el texto no se reconoce, la app usa la primera como
-        "Verdadero" y la segunda como "Falso".</li>
-      <li>Marca como correcta la que corresponda: puede ser cualquiera de las
-        dos. Usa la <strong>vista previa</strong> para confirmar el orden antes
-        de importar.</li>
+        lugar.</li>
     </ul>
   </div>
 </div>
