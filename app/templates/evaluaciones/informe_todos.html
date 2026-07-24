@@ -15,22 +15,16 @@
 #}
 <style>
   .matriz td, .matriz th { text-align: center; vertical-align: middle; }
+  /* Celdas más apretadas que el .table-sm de Bootstrap (que usa 4px). Se copia
+     su mismo selector —no `.matriz td`— porque el de Bootstrap es más
+     específico y ganaría; con este, al ir esta hoja después, manda la nuestra.
+     Medido con 20 preguntas y 12 participantes: la tabla pasa de 1390 a 1294 px
+     de ancho y de 487 a 403 px de alto. Si se ve muy apretado, subir el 2px
+     horizontal a 3px devuelve 48 px de ancho. */
+  .matriz > :not(caption) > * > * { padding: 1px 2px; }
   .matriz td.nom, .matriz th.nom { text-align: left; white-space: nowrap; }
   .matriz .cell-ok { background: #d1e7dd; color: #0f5132; font-weight: 600; }
-  /* La incorrecta lleva ademas subrayado. Es a proposito y no es decoracion:
-     impresos en blanco y negro, el verde (#d1e7dd) y el rojo (#f8d7da) quedan a
-     2 puntos de luminancia de distancia sobre 255, o sea indistinguibles. Sin
-     los simbolos ✓/✗, el subrayado es lo unico que separa acierto de error en
-     una impresora B/N, y no cuesta ni un pixel de ancho. */
-  .matriz .cell-no {
-    background: #f8d7da; color: #842029; font-weight: 600;
-    text-decoration: underline; text-underline-offset: 2px;
-  }
-  /* Estado en una letra (A/R) para no gastar el ancho de un badge completo.
-     La leyenda de abajo explica que significa cada una. */
-  .matriz .estado { font-weight: 700; }
-  .matriz .estado-ok { color: #0f5132; }
-  .matriz .estado-no { color: #842029; text-decoration: underline; }
+  .matriz .cell-no { background: #f8d7da; color: #842029; font-weight: 600; }
   .matriz th.qcol { cursor: help; }
   @media print {
     @page { size: landscape; margin: 10mm; }
@@ -48,6 +42,15 @@
        horizontal (medido en navegador). En pantalla la tabla queda igual. */
     .matriz { font-size: 7.5pt !important; }
     .matriz td, .matriz th { padding: 1px 2px !important; }
+
+    /* El nombre se parte en dos líneas en vez de truncarse: este informe es un
+       acta, y cortar un apellido con "…" sería perder el dato que identifica a
+       la persona. Ocupa lo mismo que truncar, así que no hay razón para cortar. */
+    .matriz td.nom, .matriz th.nom {
+      white-space: normal !important;
+      max-width: 110px;
+      font-size: 6.5pt !important;
+    }
 
     .matriz .badge { font-size: 6pt !important; padding: 1px 3px !important; }
   }
@@ -98,10 +101,10 @@
   </div>
 
   <div class="table-responsive">
-    {% if matriz.columnas|length > 30 %}
-      {# Medido en navegador: con nombres completos en una línea caben ~30
-         preguntas en A4 horizontal. Pasado eso, al imprimir se recortan las
-         últimas columnas SIN aviso. Mientras eso siga siendo así, al menos que la
+    {% if matriz.columnas|length > 35 %}
+      {# Con más de ~35 preguntas la matriz ya no cabe a lo ancho de una hoja A4
+         horizontal ni en modo compacto, y al imprimir se recortan las últimas
+         columnas SIN aviso. Mientras eso siga siendo así, al menos que la
          persona lo sepa antes de imprimir y tenga la salida (el CSV lleva la
          matriz completa). El aviso no se imprime: es para quien está por hacerlo. #}
       <div class="alert alert-warning no-print small">
@@ -117,7 +120,7 @@
           <th class="nom">Participante</th>
           {% for col in matriz.columnas %}
             <th class="qcol" title="{{ col.enunciado }} (correcta: {{ col.correcta_letra }})">
-              {{ loop.index }}
+              P{{ loop.index }}
             </th>
           {% endfor %}
           <th class="text-end">% logro</th>
@@ -140,22 +143,22 @@
               {% if celda.acerto is none %}
                 <td class="text-muted">—</td>
               {% elif celda.acerto %}
-                <td class="cell-ok">{{ celda.letra }}</td>
+                <td class="cell-ok">{{ celda.letra }} ✓</td>
               {% else %}
-                <td class="cell-no">{{ celda.letra }}</td>
+                <td class="cell-no">{{ celda.letra }} ✗</td>
               {% endif %}
             {% endfor %}
             <td class="text-end">
-              {{ "%.0f"|format(fila.porcentaje) if fila.porcentaje is not none else "—" }}%
+              {{ "%.1f"|format(fila.porcentaje) if fila.porcentaje is not none else "—" }}%
             </td>
             <td class="text-end fw-semibold">
               {{ "%.1f"|format(fila.nota) if fila.nota is not none else "—" }}
             </td>
             <td>
               {% if fila.aprobado %}
-                <span class="estado estado-ok" title="Aprobado">A</span>
+                <span class="badge bg-success">Aprobado</span>
               {% elif fila.aprobado is not none %}
-                <span class="estado estado-no" title="Reprobado">R</span>
+                <span class="badge bg-danger">Reprobado</span>
               {% endif %}
             </td>
           </tr>
@@ -183,25 +186,16 @@
     </p>
   {% endif %}
 
-  {# La leyenda dejo de ser un adorno: al sacar los ✓/✗ de las celdas, es el
-     unico lugar donde se explica que fondo verde = correcta y fondo rojo (con
-     subrayado) = incorrecta. Sin ella el informe impreso no se puede leer. #}
   <p class="text-muted small mb-1">
-    Cada celda muestra la alternativa que eligió esa persona:
-    <span class="cell-ok px-1">B</span> fondo verde, correcta ·
-    <span class="cell-no px-1">B</span> fondo rojo y subrayada, incorrecta ·
-    «—» no respondió.
-    En Estado, <span class="estado estado-ok">A</span> es aprobado y
-    <span class="estado estado-no">R</span> reprobado.
-    El número de cada columna es el de la pregunta, según la lista de abajo.
-    El nombre enlaza a su informe individual.
+    La letra es la alternativa que eligió cada uno · ✓ correcta · ✗ incorrecta ·
+    «—» no respondió · el nombre enlaza a su informe individual.
   </p>
 
   <div class="small text-muted">
     <p class="fw-semibold mb-1">Preguntas</p>
     {% for col in matriz.columnas %}
       <div class="mb-1">
-        <span class="fw-semibold">{{ loop.index }}.</span>
+        <span class="fw-semibold">P{{ loop.index }}.</span>
         {{ col.enunciado }}
         <span class="text-success">(correcta: {{ col.correcta_letra }})</span>
       </div>
