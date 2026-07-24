@@ -347,7 +347,10 @@
 
     .escala-barra {
       position: relative;
-      height: 58px;
+      /* 72px, no 58: el marcador del 4,0 apila raya + nota + porcentaje y
+         necesita 70px. Con 58 la etiqueta del % se salia de la barra y quedaba
+         encima de los botones de abajo. */
+      height: 72px;
     }
 
     .escala-linea {
@@ -412,7 +415,9 @@
       align-items: center;
       gap: 8px;
       flex-wrap: wrap;
-      margin-top: 6px;
+      /* Aire suficiente para que el % que viaja con el 4,0 nunca toque los
+         botones, en cualquier posicion del umbral y a cualquier ancho. */
+      margin-top: 12px;
       font-size: 13px;
       color: var(--tinta-3);
     }
