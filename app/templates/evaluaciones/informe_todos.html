@@ -20,10 +20,32 @@
   .matriz .cell-no { background: #f8d7da; color: #842029; font-weight: 600; }
   .matriz th.qcol { cursor: help; }
   @media print {
-    @page { size: landscape; }
+    @page { size: landscape; margin: 10mm; }
     .navbar { display: none !important; }
     .no-print { display: none !important; }
     body { background: #fff !important; }
+
+    /* EL BUG: .table-responsive de Bootstrap trae overflow-x:auto. En pantalla
+       eso da el scroll y funciona bien, pero al imprimir lo que sobresale NO se
+       encoge: se RECORTA en silencio. Con 20 preguntas se perdían las últimas
+       cinco sin ningún aviso. */
+    .table-responsive { overflow: visible !important; }
+
+    /* Modo compacto solo para papel: con esto entran ~33 preguntas en A4
+       horizontal (medido en navegador). En pantalla la tabla queda igual. */
+    .matriz { font-size: 7.5pt !important; }
+    .matriz td, .matriz th { padding: 1px 2px !important; }
+
+    /* El nombre se parte en dos líneas en vez de truncarse: este informe es un
+       acta, y cortar un apellido con "…" sería perder el dato que identifica a
+       la persona. Ocupa lo mismo que truncar, así que no hay razón para cortar. */
+    .matriz td.nom, .matriz th.nom {
+      white-space: normal !important;
+      max-width: 110px;
+      font-size: 6.5pt !important;
+    }
+
+    .matriz .badge { font-size: 6pt !important; padding: 1px 3px !important; }
   }
 </style>
 
@@ -72,6 +94,19 @@
   </div>
 
   <div class="table-responsive">
+    {% if matriz.columnas|length > 35 %}
+      {# Con más de ~35 preguntas la matriz ya no cabe a lo ancho de una hoja A4
+         horizontal ni en modo compacto, y al imprimir se recortan las últimas
+         columnas SIN aviso. Mientras eso siga siendo así, al menos que la
+         persona lo sepa antes de imprimir y tenga la salida (el CSV lleva la
+         matriz completa). El aviso no se imprime: es para quien está por hacerlo. #}
+      <div class="alert alert-warning no-print small">
+        Esta evaluación tiene {{ matriz.columnas|length }} preguntas. Al imprimir
+        o exportar a PDF puede que las últimas columnas no quepan en la hoja.
+        Para el detalle completo, usa
+        <a href="{{ url_for('evaluaciones.exportar_matriz_csv', eval_id=evaluacion.id, sesion_id=sesion.id) }}">Exportar CSV</a>.
+      </div>
+    {% endif %}
     <table class="table table-sm table-bordered matriz align-middle">
       <thead class="table-light">
         <tr>
