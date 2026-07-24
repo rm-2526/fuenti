@@ -28,6 +28,28 @@
   .matriz th.qcol { cursor: help; }
   @media print {
     @page { size: landscape; margin: 10mm; }
+    /* Bootstrap le pone max-width a .container segun el ancho de "pantalla".
+       Al imprimir, el ancho es la hoja: A4 horizontal menos margenes son ~1047
+       px, que cae en el breakpoint lg -> max-width 960px. Los 87px que sobran
+       se reparten como margen a ambos lados y se suman a los 10mm del @page.
+       En papel eso son ~11mm perdidos por lado, ademas de los que ya pusimos.
+       Solo para imprimir, se suelta el ancho. */
+    main.container {
+      max-width: none !important;
+      width: 100% !important;
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+      padding-top: 0 !important;
+    }
+
+    /* Sin esto, los verdes y rojos de la matriz dependen de que la persona
+       marque "Graficos de fondo" en el dialogo de impresion. Si no lo marca,
+       el acerto/error se pierde y quedan solo las letras. */
+    .matriz .cell-ok, .matriz .cell-no, .matriz .badge {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
     .navbar { display: none !important; }
     .no-print { display: none !important; }
     body { background: #fff !important; }
@@ -149,6 +171,11 @@
               {% endif %}
             {% endfor %}
             <td class="text-end">
+              {# Entero, no un decimal: el participante ya ve "85%" en su pantalla
+                 (participante/resultado.html usa %.0f) y aca decia "85.0%".
+                 El +0.5 antes de |int redondea hacia arriba en los medios:
+                 "%.0f" y el filtro round usan redondeo bancario y dejarian
+                 1 de 8 (12.5%) en 12%, que se lee como error. #}
               {{ (fila.porcentaje + 0.5)|int if fila.porcentaje is not none else "-" }}%
             </td>
             <td class="text-end fw-semibold">
