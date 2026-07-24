@@ -26,7 +26,12 @@
           {% if pregunta.tipo == 'verdadero_falso' %}
             <span class="badge bg-secondary">Verdadero / Falso</span>
           {% else %}
-            <span class="badge bg-light text-secondary border">Opción múltiple</span>
+            {# "Selección única", no "opción múltiple": el participante marca UNA
+               alternativa (radio) y el backend exige exactamente una correcta.
+               "Múltiple" describiría lo contrario —varias correctas a la vez—.
+               La clave del JSON del importador sigue siendo `opcion_multiple`:
+               es un identificador de formato, no un texto que alguien lea. #}
+            <span class="badge bg-light text-secondary border">Selección única</span>
           {% endif %}
         </h3>
         <p>{{ pregunta.enunciado }}</p>
