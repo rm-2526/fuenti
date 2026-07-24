@@ -149,7 +149,7 @@
               {% endif %}
             {% endfor %}
             <td class="text-end">
-              {{ "%.1f"|format(fila.porcentaje) if fila.porcentaje is not none else "—" }}%
+              {{ (fila.porcentaje + 0.5)|int if fila.porcentaje is not none else "-" }}%
             </td>
             <td class="text-end fw-semibold">
               {{ "%.1f"|format(fila.nota) if fila.nota is not none else "—" }}
