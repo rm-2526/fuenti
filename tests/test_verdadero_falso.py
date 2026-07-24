@@ -211,9 +211,11 @@ def test_matriz_muestra_letras_vf(client, facilitador, app):
         f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/informe-todos"
     ).get_data(as_text=True)
 
-    assert "V \u2713" in cuerpo         # celda: V (Verdadero) con ✓
+    # La celda lleva la letra sola (el ✓/✗ se quito: el color y el subrayado
+    # distinguen acierto de error). Lo que se verifica aqui es CUAL letra.
+    assert 'cell-ok">V<' in cuerpo      # celda: V (Verdadero), acertada
     assert "correcta: V" in cuerpo      # encabezado marca la correcta como V
-    assert "A \u2713" not in cuerpo     # NO se usa la letra A para una V/F
+    assert 'cell-ok">A<' not in cuerpo  # NO se usa la letra A para una V/F
 
 
 # ----------------------- Orden elegible de la V/F -----------------------
@@ -317,6 +319,6 @@ def test_matriz_usa_el_texto_y_no_la_posicion(client, facilitador, app):
         f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/informe-todos"
     ).get_data(as_text=True)
 
-    assert "F \u2713" in cuerpo        # respondió Falso, que estaba primera
+    assert 'cell-ok">F<' in cuerpo    # respondió Falso, que estaba primera
     assert "correcta: F" in cuerpo    # y la correcta es F, no V
-    assert "V \u2713" not in cuerpo
+    assert 'cell-ok">V<' not in cuerpo

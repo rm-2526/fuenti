@@ -206,11 +206,15 @@ def test_informe_todos_matriz_filas_columnas_y_leyenda(client, facilitador, app)
     assert "Ana Soto" in cuerpo
     assert "Beto Diaz" in cuerpo
     assert "Carla Pendiente" not in cuerpo    # pendiente: no va
-    assert "P1" in cuerpo and "P2" in cuerpo  # encabezados de columna
+    # Las columnas se numeran 1, 2, 3… (sin la "P", que solo gastaba ancho).
+    # Se cuentan los <th> en vez de buscar "1", que aparece en toda la pagina.
+    assert cuerpo.count('class="qcol"') == 2  # una columna por pregunta
     assert "¿2 + 2?" in cuerpo                # la leyenda trae el enunciado
     assert "% de acierto" in cuerpo           # fila de resumen por pregunta
-    assert "\u2713" in cuerpo and "\u2717" in cuerpo  # aciertos y errores marcados
-    assert "A \u2713" in cuerpo               # Ana eligio A (correcta) en P1
+    # Acierto y error ya no se marcan con ✓/✗ sino con la clase de la celda
+    # (color de fondo + subrayado en la incorrecta).
+    assert "cell-ok" in cuerpo and "cell-no" in cuerpo
+    assert 'cell-ok">A<' in cuerpo            # Ana eligio A (correcta) en la 1
     # Tira de estadisticas del grupo.
     assert "Promedio de nota" in cuerpo
     assert "Aprobados" in cuerpo

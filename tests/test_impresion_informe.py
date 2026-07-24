@@ -51,13 +51,9 @@ def test_la_impresion_compacta_la_matriz():
 
 def test_el_nombre_no_se_trunca_al_imprimir():
     """El informe es un acta: cortar un apellido con '…' pierde el dato que
-    identifica a la persona. Se parte en dos lineas, que ocupa lo mismo."""
-    estilos = _estilos_de_impresion()
-    inicio = estilos.index(".matriz td.nom")
-    regla = estilos[inicio:estilos.index("}", inicio)]
-
-    assert "normal" in regla, "el nombre debe poder partirse en varias lineas"
-    assert "ellipsis" not in regla, "no truncar nombres en un acta"
+    identifica a la persona. El ancho se gano quitando contenido de las celdas
+    (✓/✗, la "P" de la cabecera, el badge de estado), no recortando nombres."""
+    assert "ellipsis" not in _estilos_de_impresion(), "no truncar nombres en un acta"
 
 
 # === El aviso para evaluaciones muy largas ===
