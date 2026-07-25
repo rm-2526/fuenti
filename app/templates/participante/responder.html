@@ -13,12 +13,12 @@
 
     <form method="POST"
           action="{{ url_for('participante.responder', codigo=sesion.codigo) }}">
-      {% for pregunta in preguntas %}
+      {% for pregunta, alternativas in preguntas_para_mostrar %}
         <div class="card mb-3">
           <div class="card-body">
             <p class="fw-semibold mb-3">{{ loop.index }}. {{ pregunta.enunciado }}</p>
 
-            {% for alt in pregunta.alternativas|sort(attribute='orden') %}
+            {% for alt in alternativas %}
               <div class="form-check mb-2">
                 <input class="form-check-input"
                        type="radio"

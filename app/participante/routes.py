@@ -19,6 +19,7 @@ from flask import (
 from app import db
 from app.models import Participante, Respuesta, Resultado, Sesion, ahora_utc
 from app.participante import bp
+from app.utils.aleatorizar import orden_alternativas
 from app.utils.calificacion import calcular_calificacion
 from app.utils.reporte import foto_de_respuesta
 from app.utils.rut import es_rut_bloqueado, hash_rut, validar_rut
@@ -65,7 +66,7 @@ def responder(codigo):
     return render_template(
         "participante/responder.html",
         sesion=sesion,
-        preguntas=preguntas,
+        preguntas_para_mostrar=_preguntas_para_mostrar(preguntas, participante),
         seleccion={},
     )
 
@@ -123,6 +124,21 @@ def _participante_de_sesion(sesion: Sesion) -> Participante | None:
 def _preguntas_ordenadas(sesion: Sesion) -> list:
     """Preguntas de la evaluacion de la sesion, ordenadas por su campo orden."""
     return sorted(sesion.evaluacion.preguntas, key=lambda p: p.orden)
+
+
+def _preguntas_para_mostrar(preguntas: list, participante: Participante) -> list:
+    """Empareja cada pregunta con sus alternativas EN EL ORDEN que vera este
+    participante: [(pregunta, [alternativa, ...]), ...].
+
+    El orden de las PREGUNTAS no cambia (sigue el .orden de la evaluacion, que es
+    lo que la matriz del informe usa como P1, P2...). Lo que se baraja es solo el
+    orden de las ALTERNATIVAS dentro de cada pregunta, de forma estable por
+    participante, y solo en las de opcion multiple (ver app/utils/aleatorizar).
+    """
+    return [
+        (p, orden_alternativas(p, participante.id))
+        for p in preguntas
+    ]
 
 
 def _procesar_ingreso(sesion: Sesion):
@@ -230,7 +246,7 @@ def _procesar_respuestas(sesion: Sesion, participante: Participante, preguntas: 
         return render_template(
             "participante/responder.html",
             sesion=sesion,
-            preguntas=preguntas,
+            preguntas_para_mostrar=_preguntas_para_mostrar(preguntas, participante),
             seleccion=seleccion,
         )
 
