@@ -12,4 +12,4 @@ class Config:
     # igual con los números. En Render se setea la clave; en local y en tests se
     # deja vacía a propósito para no llamar a la red.
     GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-    GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+    GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")

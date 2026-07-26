@@ -17,15 +17,16 @@ el prompt no lleva nombre ni hash está en analisis.py, que es quien lo arma.
 import json
 import urllib.parse
 import urllib.request
-import urllib.error
 
 _ENDPOINT = (
     "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 )
 
 # Tier gratis: Flash/Flash-Lite (los modelos Pro salieron del gratis en 2026).
+# 'gemini-flash-latest' es un alias que Google mantiene apuntando al Flash
+# vigente, así no hay que cambiar código cada vez que jubilan un ID de modelo.
 # Se puede pisar con la variable de entorno GEMINI_MODEL sin tocar código.
-MODELO_POR_DEFECTO = "gemini-2.5-flash"
+MODELO_POR_DEFECTO = "gemini-flash-latest"
 
 
 def generar_texto(
@@ -57,16 +58,7 @@ def generar_texto(
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             datos = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        import logging
-        cuerpo = e.read().decode("utf-8", "replace")
-        logging.getLogger("gemini").warning(
-            "GEMINI HTTPError %s: %s", e.code, cuerpo[:800]
-        )
-        return None
-    except Exception as e:
-        import logging
-        logging.getLogger("gemini").warning("GEMINI error: %r", e)
+    except Exception:
         return None
 
     return _extraer_texto(datos)
@@ -78,7 +70,5 @@ def _extraer_texto(datos) -> str | None:
         partes = datos["candidates"][0]["content"]["parts"]
         texto = "".join(p.get("text", "") for p in partes).strip()
     except (KeyError, IndexError, TypeError):
-        import logging
-        logging.getLogger("gemini").warning("GEMINI respuesta sin texto: %r", datos)
         return None
     return texto or None
