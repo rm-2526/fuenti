@@ -280,3 +280,78 @@ def test_analisis_grupo_se_muestra_en_informe_todos(app, client, facilitador):
     cuerpo = resp.get_data(as_text=True)
     assert "El grupo falla en evacuación." in cuerpo
     assert "Sugerido por IA" in cuerpo
+
+
+# ------------------------ Backfill por consola (CLI) ------------------------
+
+def test_backfill_genera_para_sesion_cerrada(app, facilitador, monkeypatch):
+    app.config["GEMINI_API_KEY"] = "clave-de-prueba"
+    monkeypatch.setattr(
+        gemini, "generar_texto",
+        lambda prompt, api_key, modelo=None, timeout=30: "Texto de backfill.",
+    )
+    eval_id, sesion_id, part_id = _sesion_con_finalizado(
+        app, facilitador.id, estado="cerrada"
+    )
+    with app.app_context():
+        codigo = db.session.get(Sesion, sesion_id).codigo
+
+    result = app.test_cli_runner().invoke(args=["analisis-backfill", codigo])
+
+    assert result.exit_code == 0
+    with app.app_context():
+        s = db.session.get(Sesion, sesion_id)
+        r = db.session.query(Resultado).filter_by(participante_id=part_id).one()
+        assert s.analisis_ia == "Texto de backfill."
+        assert r.analisis_ia == "Texto de backfill."
+
+
+def test_backfill_no_pisa_analisis_existente(app, facilitador, monkeypatch):
+    app.config["GEMINI_API_KEY"] = "clave-de-prueba"
+    eval_id, sesion_id, part_id = _sesion_con_finalizado(
+        app, facilitador.id, estado="cerrada"
+    )
+    with app.app_context():
+        s = db.session.get(Sesion, sesion_id)
+        s.analisis_ia = "ORIGINAL grupo"
+        r = db.session.query(Resultado).filter_by(participante_id=part_id).one()
+        r.analisis_ia = "ORIGINAL persona"
+        db.session.commit()
+        codigo = s.codigo
+
+    monkeypatch.setattr(
+        gemini, "generar_texto",
+        lambda prompt, api_key, modelo=None, timeout=30: "NUEVO (no debe pisar)",
+    )
+    result = app.test_cli_runner().invoke(args=["analisis-backfill", codigo])
+
+    assert result.exit_code == 0
+    with app.app_context():
+        s = db.session.get(Sesion, sesion_id)
+        r = db.session.query(Resultado).filter_by(participante_id=part_id).one()
+        assert s.analisis_ia == "ORIGINAL grupo"
+        assert r.analisis_ia == "ORIGINAL persona"
+
+
+def test_backfill_codigo_inexistente_sale_con_error(app):
+    app.config["GEMINI_API_KEY"] = "clave-de-prueba"
+    result = app.test_cli_runner().invoke(args=["analisis-backfill", "NOEXST"])
+    assert result.exit_code != 0
+    assert "No existe" in result.output
+
+
+def test_backfill_sin_api_key_avisa_y_no_genera(app, facilitador):
+    app.config["GEMINI_API_KEY"] = ""
+    eval_id, sesion_id, part_id = _sesion_con_finalizado(
+        app, facilitador.id, estado="cerrada"
+    )
+    with app.app_context():
+        codigo = db.session.get(Sesion, sesion_id).codigo
+
+    result = app.test_cli_runner().invoke(args=["analisis-backfill", codigo])
+
+    assert result.exit_code != 0
+    assert "GEMINI_API_KEY" in result.output
+    with app.app_context():
+        s = db.session.get(Sesion, sesion_id)
+        assert s.analisis_ia is None

@@ -77,6 +77,10 @@ def create_app(config_class: type = Config) -> Flask:
     from app.admin import bp as admin_bp
     app.register_blueprint(admin_bp)
 
+    # Comandos de consola (flask analisis-backfill ...)
+    from app.cli import registrar_cli
+    registrar_cli(app)
+
     @app.route("/")
     def index():
         return render_template("index.html")

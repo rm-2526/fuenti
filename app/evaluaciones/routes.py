@@ -3,6 +3,7 @@ import io
 import json
 import re
 import unicodedata
+from collections import namedtuple
 from dataclasses import asdict
 
 from flask import (
@@ -704,69 +705,103 @@ def cerrar_sesion(eval_id, sesion_id):
 
 
 def _generar_analisis_ia(sesion: Sesion) -> None:
-    """Genera y persiste el análisis de IA del grupo y de cada persona.
+    """Wrapper del CIERRE de sesión: lee la config, genera y persiste.
 
-    Se llama una sola vez, al cerrar la sesión. Es idempotente a nivel de campo:
-    solo genera donde 'analisis_ia' está en NULL, así que volver a llamarla (o
-    re-cerrar) no regenera ni pisa lo ya congelado.
-
-    Degrada en silencio: sin API key no hace nada; si una llamada al modelo
-    falla, devuelve None y ese análisis simplemente no se guarda. Todo el bloque
-    va en try/except para que cerrar la sesión nunca falle por culpa de la IA.
-
-    PRIVACIDAD: a analisis.py solo se le pasan textos de preguntas, aciertos y
-    números; el nombre y el hash del participante no salen nunca hacia el modelo.
+    Degrada en silencio: sin API key no hace nada; cualquier error se traga
+    para que cerrar la sesión nunca falle por culpa de la IA. El backfill por
+    consola usa el mismo núcleo (generar_analisis_de_sesion) pero SÍ reporta lo
+    que hizo.
     """
     api_key = current_app.config.get("GEMINI_API_KEY")
     if not api_key:
         return
-
     modelo = current_app.config.get("GEMINI_MODEL", gemini.MODELO_POR_DEFECTO)
-
     try:
-        finalizados = [p for p in sesion.participantes if p.resultado is not None]
-        if not finalizados:
-            return
-
-        resumen_grupo = _resumen_de_sesion(sesion)
-        desgloses = [
-            desglose_desde_respuestas(p.respuestas) for p in finalizados
-        ]
-
-        # --- Por persona ---
-        for participante, desglose in zip(finalizados, desgloses):
-            resultado = participante.resultado
-            if resultado.analisis_ia:
-                continue
-            datos = resumen_persona(
-                desglose,
-                porcentaje=resultado.porcentaje,
-                umbral=resultado.umbral_aprobacion,
-                aprobado=resultado.aprobado,
-                promedio_logro_grupo=resumen_grupo.promedio_logro,
-            )
-            texto = gemini.generar_texto(prompt_persona(datos), api_key, modelo)
-            if texto:
-                resultado.analisis_ia = texto
-                resultado.analisis_generado_at = ahora_utc()
-
-        # --- Del grupo ---
-        if not sesion.analisis_ia:
-            datos_sesion = resumen_sesion(
-                desgloses,
-                aprobados=resumen_grupo.aprobados,
-                reprobados=resumen_grupo.reprobados,
-                promedio_logro=resumen_grupo.promedio_logro,
-            )
-            texto = gemini.generar_texto(prompt_sesion(datos_sesion), api_key, modelo)
-            if texto:
-                sesion.analisis_ia = texto
-                sesion.analisis_generado_at = ahora_utc()
-
+        generar_analisis_de_sesion(sesion, api_key, modelo)
         db.session.commit()
     except Exception:
         # Nunca dejar la sesión a medio cerrar por un problema de la IA.
         db.session.rollback()
+
+
+# Resultado de una corrida de generación, para poder reportarlo (lo usa el CLI).
+ResultadoAnalisis = namedtuple(
+    "ResultadoAnalisis",
+    "finalizados personas_generadas personas_omitidas "
+    "grupo_generado grupo_omitido fallos",
+)
+
+
+def generar_analisis_de_sesion(sesion, api_key, modelo) -> "ResultadoAnalisis":
+    """Núcleo de generación del análisis de IA (grupo + por persona).
+
+    Compartido entre el cierre de sesión y el backfill por consola. Es
+    idempotente: solo genera donde 'analisis_ia' está en NULL, así que volver a
+    correrlo no pisa lo ya congelado. NO hace commit (lo hace quien llama) y NO
+    atrapa excepciones (quien llama decide). Devuelve cuántos análisis generó,
+    cuántos omitió por ya tenerlos y cuántas llamadas al modelo volvieron vacías.
+
+    PRIVACIDAD: a analisis.py solo se le pasan textos de preguntas, aciertos y
+    números; el nombre y el hash del participante no salen nunca hacia el modelo.
+    """
+    finalizados = [p for p in sesion.participantes if p.resultado is not None]
+    if not finalizados:
+        return ResultadoAnalisis(0, 0, 0, False, False, 0)
+
+    resumen_grupo = _resumen_de_sesion(sesion)
+    desgloses = [desglose_desde_respuestas(p.respuestas) for p in finalizados]
+
+    personas_generadas = 0
+    personas_omitidas = 0
+    fallos = 0
+
+    # --- Por persona ---
+    for participante, desglose in zip(finalizados, desgloses):
+        resultado = participante.resultado
+        if resultado.analisis_ia:
+            personas_omitidas += 1
+            continue
+        datos = resumen_persona(
+            desglose,
+            porcentaje=resultado.porcentaje,
+            umbral=resultado.umbral_aprobacion,
+            aprobado=resultado.aprobado,
+            promedio_logro_grupo=resumen_grupo.promedio_logro,
+        )
+        texto = gemini.generar_texto(prompt_persona(datos), api_key, modelo)
+        if texto:
+            resultado.analisis_ia = texto
+            resultado.analisis_generado_at = ahora_utc()
+            personas_generadas += 1
+        else:
+            fallos += 1
+
+    # --- Del grupo ---
+    grupo_generado = False
+    grupo_omitido = bool(sesion.analisis_ia)
+    if not grupo_omitido:
+        datos_sesion = resumen_sesion(
+            desgloses,
+            aprobados=resumen_grupo.aprobados,
+            reprobados=resumen_grupo.reprobados,
+            promedio_logro=resumen_grupo.promedio_logro,
+        )
+        texto = gemini.generar_texto(prompt_sesion(datos_sesion), api_key, modelo)
+        if texto:
+            sesion.analisis_ia = texto
+            sesion.analisis_generado_at = ahora_utc()
+            grupo_generado = True
+        else:
+            fallos += 1
+
+    return ResultadoAnalisis(
+        finalizados=len(finalizados),
+        personas_generadas=personas_generadas,
+        personas_omitidas=personas_omitidas,
+        grupo_generado=grupo_generado,
+        grupo_omitido=grupo_omitido,
+        fallos=fallos,
+    )
 
 
 # --------------------------- Helpers ---------------------------
