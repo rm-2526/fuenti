@@ -116,6 +116,14 @@ class Sesion(db.Model):
     abierta_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=ahora_utc)
     cerrada_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    # --- Análisis de IA del GRUPO (congelado al cerrar la sesión) ---
+    # Texto narrativo de fortalezas/debilidades del grupo, generado UNA sola vez
+    # al cerrar la sesión y guardado tal cual (igual que la foto congelada: no se
+    # regenera al abrir el informe). Nullable: si no hay API key o la llamada
+    # falla, queda en NULL y el informe se muestra sin este bloque.
+    analisis_ia: Mapped[str | None] = mapped_column(Text, nullable=True)
+    analisis_generado_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
     evaluacion: Mapped["Evaluacion"] = relationship(back_populates="sesiones")
     participantes: Mapped[list["Participante"]] = relationship(
         back_populates="sesion", cascade="all, delete-orphan"
@@ -202,5 +210,12 @@ class Resultado(db.Model):
     # lo que efectivamente se aplico. Nullable por compatibilidad.
     evaluacion_titulo: Mapped[str | None] = mapped_column(String(200), nullable=True)
     umbral_aprobacion: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # --- Análisis de IA de la PERSONA (congelado al cerrar la sesión) ---
+    # Texto narrativo de fortalezas/debilidades del participante, generado UNA
+    # sola vez al cerrar la sesión. Mismas reglas que el de Sesion: nullable, no
+    # se regenera, y el nombre/hash NUNCA se le mandan al modelo (ver analisis.py).
+    analisis_ia: Mapped[str | None] = mapped_column(Text, nullable=True)
+    analisis_generado_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     participante: Mapped["Participante"] = relationship(back_populates="resultado")

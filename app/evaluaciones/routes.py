@@ -25,6 +25,13 @@ from app.models import Alternativa, Evaluacion, Participante, Pregunta, Resultad
 from app.utils.sesion import generar_codigo_sesion
 from app.utils.qr import svg_de_enlace
 from app.utils.estadisticas import resumir_resultados
+from app.utils import gemini
+from app.utils.analisis import (
+    prompt_persona,
+    prompt_sesion,
+    resumen_persona,
+    resumen_sesion,
+)
 from app.utils.reporte import (
     ENCABEZADOS_CSV,
     ENCABEZADOS_CSV_HISTORIAL,
@@ -685,11 +692,81 @@ def cerrar_sesion(eval_id, sesion_id):
         sesion.estado = "cerrada"
         sesion.cerrada_at = ahora_utc()
         db.session.commit()
+        # Cerrar es el momento natural para congelar el análisis de IA: los
+        # resultados ya no cambian. Va DESPUÉS del commit y envuelto para que un
+        # fallo de la IA nunca impida cerrar la sesión.
+        _generar_analisis_ia(sesion)
         flash("Sesión cerrada. No aceptará nuevos ingresos.", "success")
 
     return redirect(
         url_for("evaluaciones.detalle_sesion", eval_id=eval_id, sesion_id=sesion_id)
     )
+
+
+def _generar_analisis_ia(sesion: Sesion) -> None:
+    """Genera y persiste el análisis de IA del grupo y de cada persona.
+
+    Se llama una sola vez, al cerrar la sesión. Es idempotente a nivel de campo:
+    solo genera donde 'analisis_ia' está en NULL, así que volver a llamarla (o
+    re-cerrar) no regenera ni pisa lo ya congelado.
+
+    Degrada en silencio: sin API key no hace nada; si una llamada al modelo
+    falla, devuelve None y ese análisis simplemente no se guarda. Todo el bloque
+    va en try/except para que cerrar la sesión nunca falle por culpa de la IA.
+
+    PRIVACIDAD: a analisis.py solo se le pasan textos de preguntas, aciertos y
+    números; el nombre y el hash del participante no salen nunca hacia el modelo.
+    """
+    api_key = current_app.config.get("GEMINI_API_KEY")
+    if not api_key:
+        return
+
+    modelo = current_app.config.get("GEMINI_MODEL", gemini.MODELO_POR_DEFECTO)
+
+    try:
+        finalizados = [p for p in sesion.participantes if p.resultado is not None]
+        if not finalizados:
+            return
+
+        resumen_grupo = _resumen_de_sesion(sesion)
+        desgloses = [
+            desglose_desde_respuestas(p.respuestas) for p in finalizados
+        ]
+
+        # --- Por persona ---
+        for participante, desglose in zip(finalizados, desgloses):
+            resultado = participante.resultado
+            if resultado.analisis_ia:
+                continue
+            datos = resumen_persona(
+                desglose,
+                porcentaje=resultado.porcentaje,
+                umbral=resultado.umbral_aprobacion,
+                aprobado=resultado.aprobado,
+                promedio_logro_grupo=resumen_grupo.promedio_logro,
+            )
+            texto = gemini.generar_texto(prompt_persona(datos), api_key, modelo)
+            if texto:
+                resultado.analisis_ia = texto
+                resultado.analisis_generado_at = ahora_utc()
+
+        # --- Del grupo ---
+        if not sesion.analisis_ia:
+            datos_sesion = resumen_sesion(
+                desgloses,
+                aprobados=resumen_grupo.aprobados,
+                reprobados=resumen_grupo.reprobados,
+                promedio_logro=resumen_grupo.promedio_logro,
+            )
+            texto = gemini.generar_texto(prompt_sesion(datos_sesion), api_key, modelo)
+            if texto:
+                sesion.analisis_ia = texto
+                sesion.analisis_generado_at = ahora_utc()
+
+        db.session.commit()
+    except Exception:
+        # Nunca dejar la sesión a medio cerrar por un problema de la IA.
+        db.session.rollback()
 
 
 # --------------------------- Helpers ---------------------------
