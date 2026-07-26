@@ -766,6 +766,9 @@ def _generar_analisis_ia(sesion: Sesion) -> None:
         db.session.commit()
     except Exception:
         # Nunca dejar la sesión a medio cerrar por un problema de la IA.
+        #db.session.rollback()
+        # TEMPORAL: destapar el error para diagnóstico en logs.
+        current_app.logger.exception("Fallo al generar análisis de IA")
         db.session.rollback()
 
 
