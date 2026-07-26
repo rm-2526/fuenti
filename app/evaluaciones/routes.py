@@ -718,13 +718,21 @@ def _generar_analisis_ia(sesion: Sesion) -> None:
     números; el nombre y el hash del participante no salen nunca hacia el modelo.
     """
     api_key = current_app.config.get("GEMINI_API_KEY")
+    current_app.logger.warning(
+        "ANALISIS IA: key presente=%s, largo=%s",
+        bool(api_key), len(api_key or ""),
+    )
     if not api_key:
+        current_app.logger.warning("ANALISIS IA: no hay key, no se genera")
         return
 
     modelo = current_app.config.get("GEMINI_MODEL", gemini.MODELO_POR_DEFECTO)
 
     try:
         finalizados = [p for p in sesion.participantes if p.resultado is not None]
+        current_app.logger.warning(
+            "ANALISIS IA: finalizados=%s", len(finalizados)
+        )
         if not finalizados:
             return
 
