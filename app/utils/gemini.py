@@ -17,6 +17,7 @@ el prompt no lleva nombre ni hash está en analisis.py, que es quien lo arma.
 import json
 import urllib.parse
 import urllib.request
+import urllib.error
 
 _ENDPOINT = (
     "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
@@ -56,7 +57,16 @@ def generar_texto(
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             datos = json.loads(resp.read().decode("utf-8"))
-    except Exception:
+    except urllib.error.HTTPError as e:
+        import logging
+        cuerpo = e.read().decode("utf-8", "replace")
+        logging.getLogger("gemini").warning(
+            "GEMINI HTTPError %s: %s", e.code, cuerpo[:800]
+        )
+        return None
+    except Exception as e:
+        import logging
+        logging.getLogger("gemini").warning("GEMINI error: %r", e)
         return None
 
     return _extraer_texto(datos)
@@ -68,5 +78,7 @@ def _extraer_texto(datos) -> str | None:
         partes = datos["candidates"][0]["content"]["parts"]
         texto = "".join(p.get("text", "") for p in partes).strip()
     except (KeyError, IndexError, TypeError):
+        import logging
+        logging.getLogger("gemini").warning("GEMINI respuesta sin texto: %r", datos)
         return None
     return texto or None
