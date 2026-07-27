@@ -2,6 +2,7 @@ import csv
 import io
 import json
 import re
+import time
 import unicodedata
 from collections import namedtuple
 from dataclasses import asdict
@@ -716,8 +717,9 @@ def _generar_analisis_ia(sesion: Sesion) -> None:
     if not api_key:
         return
     modelo = current_app.config.get("GEMINI_MODEL", gemini.MODELO_POR_DEFECTO)
+    espaciado = current_app.config.get("GEMINI_ESPACIADO_SEG", 0.0)
     try:
-        generar_analisis_de_sesion(sesion, api_key, modelo)
+        generar_analisis_de_sesion(sesion, api_key, modelo, espaciado=espaciado)
         db.session.commit()
     except Exception:
         # Nunca dejar la sesión a medio cerrar por un problema de la IA.
@@ -732,7 +734,9 @@ ResultadoAnalisis = namedtuple(
 )
 
 
-def generar_analisis_de_sesion(sesion, api_key, modelo) -> "ResultadoAnalisis":
+def generar_analisis_de_sesion(
+    sesion, api_key, modelo, espaciado: float = 0.0, _sleep=time.sleep
+) -> "ResultadoAnalisis":
     """Núcleo de generación del análisis de IA (grupo + por persona).
 
     Compartido entre el cierre de sesión y el backfill por consola. Es
@@ -740,6 +744,12 @@ def generar_analisis_de_sesion(sesion, api_key, modelo) -> "ResultadoAnalisis":
     correrlo no pisa lo ya congelado. NO hace commit (lo hace quien llama) y NO
     atrapa excepciones (quien llama decide). Devuelve cuántos análisis generó,
     cuántos omitió por ya tenerlos y cuántas llamadas al modelo volvieron vacías.
+
+    'espaciado' son los segundos de pausa ENTRE llamadas reales al modelo, para
+    no pasarse del límite por minuto (RPM) del tier gratis. No pausa antes de la
+    primera ni después de la última, ni gasta pausas en participantes omitidos.
+    El backoff de gemini.py sigue actuando como red de seguridad por si igual
+    aparece un 429. '_sleep' se inyecta para poder testear sin esperar de verdad.
 
     PRIVACIDAD: a analisis.py solo se le pasan textos de preguntas, aciertos y
     números; el nombre y el hash del participante no salen nunca hacia el modelo.
@@ -755,6 +765,16 @@ def generar_analisis_de_sesion(sesion, api_key, modelo) -> "ResultadoAnalisis":
     personas_omitidas = 0
     fallos = 0
 
+    # Espacia las llamadas: pausa 'espaciado' segundos antes de cada llamada
+    # salvo la primera. Así el ritmo total no supera el RPM del tier gratis.
+    _primera = [True]
+
+    def _espaciar():
+        if _primera[0]:
+            _primera[0] = False
+        elif espaciado:
+            _sleep(espaciado)
+
     # --- Por persona ---
     for participante, desglose in zip(finalizados, desgloses):
         resultado = participante.resultado
@@ -768,6 +788,7 @@ def generar_analisis_de_sesion(sesion, api_key, modelo) -> "ResultadoAnalisis":
             aprobado=resultado.aprobado,
             promedio_logro_grupo=resumen_grupo.promedio_logro,
         )
+        _espaciar()
         texto = gemini.generar_texto(prompt_persona(datos), api_key, modelo)
         if texto:
             resultado.analisis_ia = texto
@@ -786,6 +807,7 @@ def generar_analisis_de_sesion(sesion, api_key, modelo) -> "ResultadoAnalisis":
             reprobados=resumen_grupo.reprobados,
             promedio_logro=resumen_grupo.promedio_logro,
         )
+        _espaciar()
         texto = gemini.generar_texto(prompt_sesion(datos_sesion), api_key, modelo)
         if texto:
             sesion.analisis_ia = texto

@@ -55,9 +55,10 @@ def analisis_backfill(codigo):
         raise SystemExit(1)
 
     modelo = current_app.config.get("GEMINI_MODEL", gemini.MODELO_POR_DEFECTO)
+    espaciado = current_app.config.get("GEMINI_ESPACIADO_SEG", 0.0)
 
     try:
-        res = generar_analisis_de_sesion(sesion, api_key, modelo)
+        res = generar_analisis_de_sesion(sesion, api_key, modelo, espaciado=espaciado)
         db.session.commit()
     except Exception as e:  # noqa: BLE001 - queremos ver la causa en consola
         db.session.rollback()

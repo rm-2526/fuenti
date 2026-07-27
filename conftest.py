@@ -11,6 +11,9 @@ import os
 # Setear ANTES de importar la app
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ["SECRET_KEY"] = "test-secret-key-only-for-tests"
+# Sin pausa entre llamadas al modelo durante los tests: no queremos que la suite
+# duerma. En producción GEMINI_ESPACIADO_SEG trae su default real.
+os.environ["GEMINI_ESPACIADO_SEG"] = "0"
 
 import pytest
 

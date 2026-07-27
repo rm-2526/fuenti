@@ -13,3 +13,8 @@ class Config:
     # deja vacía a propósito para no llamar a la red.
     GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
     GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
+    # Segundos de pausa ENTRE llamadas al modelo, para no pasarse del límite por
+    # minuto (RPM) del tier gratis. Con Flash-Lite (~15 RPM) 4s va holgado; si se
+    # usa el Flash normal (~5 RPM) conviene subirlo a ~13. El backoff de gemini.py
+    # cubre los 429 que igual se escapen.
+    GEMINI_ESPACIADO_SEG = float(os.environ.get("GEMINI_ESPACIADO_SEG", "4"))

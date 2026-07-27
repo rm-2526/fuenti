@@ -117,6 +117,64 @@ def test_gemini_prompt_vacio_devuelve_none():
     assert gemini.generar_texto("", api_key="clave") is None
 
 
+def _http_error(codigo):
+    import urllib.error
+    return urllib.error.HTTPError("http://x", codigo, "err", {}, None)
+
+
+def _respuesta_ok(texto):
+    return {"candidates": [{"content": {"parts": [{"text": texto}]}}]}
+
+
+def test_gemini_reintenta_en_429_y_luego_tiene_exito(monkeypatch):
+    # Primera llamada choca con el límite por minuto; la segunda funciona.
+    llamadas = []
+
+    def fake(req, timeout):
+        llamadas.append(1)
+        if len(llamadas) == 1:
+            raise _http_error(429)
+        return _respuesta_ok("Análisis OK")
+
+    monkeypatch.setattr(gemini, "_llamar_api", fake)
+    texto = gemini.generar_texto(
+        "prompt", api_key="clave", _sleep=lambda s: None
+    )
+    assert texto == "Análisis OK"
+    assert len(llamadas) == 2  # reintentó una vez
+
+
+def test_gemini_no_reintenta_en_404(monkeypatch):
+    # Un 404 (modelo inexistente) es configuración: no se reintenta.
+    llamadas = []
+
+    def fake(req, timeout):
+        llamadas.append(1)
+        raise _http_error(404)
+
+    monkeypatch.setattr(gemini, "_llamar_api", fake)
+    texto = gemini.generar_texto(
+        "prompt", api_key="clave", _sleep=lambda s: None
+    )
+    assert texto is None
+    assert len(llamadas) == 1  # NO reintentó
+
+
+def test_gemini_agota_reintentos_si_429_persiste(monkeypatch):
+    llamadas = []
+
+    def fake(req, timeout):
+        llamadas.append(1)
+        raise _http_error(429)
+
+    monkeypatch.setattr(gemini, "_llamar_api", fake)
+    texto = gemini.generar_texto(
+        "prompt", api_key="clave", intentos=3, _sleep=lambda s: None
+    )
+    assert texto is None
+    assert len(llamadas) == 3  # intentó las 3 veces y se rindió
+
+
 # --------------------------- Cableado / DB ---------------------------
 
 def _sesion_con_finalizado(app, facilitador_id, estado="abierta"):
@@ -355,3 +413,29 @@ def test_backfill_sin_api_key_avisa_y_no_genera(app, facilitador):
     with app.app_context():
         s = db.session.get(Sesion, sesion_id)
         assert s.analisis_ia is None
+
+
+# ------------------------ Espaciado entre llamadas ------------------------
+
+def test_espaciado_pausa_entre_llamadas(app, facilitador, monkeypatch):
+    # 1 persona + 1 grupo = 2 llamadas reales => 1 sola pausa entre ambas.
+    from app.evaluaciones.routes import generar_analisis_de_sesion
+
+    monkeypatch.setattr(
+        gemini, "generar_texto",
+        lambda prompt, api_key, modelo=None, timeout=30: "texto",
+    )
+    esperas = []
+    eval_id, sesion_id, part_id = _sesion_con_finalizado(
+        app, facilitador.id, estado="cerrada"
+    )
+    with app.app_context():
+        sesion = db.session.get(Sesion, sesion_id)
+        generar_analisis_de_sesion(
+            sesion, "clave", "modelo",
+            espaciado=5.0, _sleep=lambda s: esperas.append(s),
+        )
+
+    # No pausa antes de la primera ni después de la última: exactamente una
+    # pausa de 5s entre la llamada de la persona y la del grupo.
+    assert esperas == [5.0]
