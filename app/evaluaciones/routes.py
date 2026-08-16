@@ -39,6 +39,7 @@ from app.utils.reporte import (
     ENCABEZADOS_CSV_HISTORIAL,
     agrupar_historial,
     agrupar_personas,
+    barras_resumen,
     construir_matriz,
     desglose_desde_respuestas,
     filas_csv_historial,
@@ -620,6 +621,7 @@ def historial_participante(hash_id):
         hash_id=hash_id,
         hash_corto=hash_id[:10],
         grupos=grupos,
+        barras=barras_resumen(grupos),
     )
 
 

@@ -6,10 +6,55 @@
   esconden la barra de navegación y los botones, para que el PDF salga limpio.
 #}
 <style>
+  /* Panel de resumen: una barra por rendicion finalizada. El largo se lee
+     SIEMPRE contra la marca de su propio umbral, no contra las otras barras:
+     evaluaciones distintas no son comparables entre si. */
+  .barra-pista {
+    position: relative;
+    height: 22px;
+    border-radius: .25rem;
+    background-color: #f0efec;
+    overflow: hidden;
+  }
+  .barra-logro {
+    height: 100%;
+    border-radius: .25rem;
+  }
+  .barra-logro.aprobado { background-color: #1d9e75; }
+  .barra-logro.reprobado { background-color: #e24b4a; }
+  .barra-umbral {
+    position: absolute;
+    top: -3px;
+    bottom: -3px;
+    width: 2px;
+    background-color: #52514e;
+  }
+  .marca-umbral {
+    display: inline-block;
+    width: 2px;
+    height: .7rem;
+    background-color: #52514e;
+    vertical-align: -1px;
+  }
+  .marca-color {
+    display: inline-block;
+    width: .7rem;
+    height: .7rem;
+    border-radius: .15rem;
+    vertical-align: -1px;
+  }
+
   @media print {
     .navbar { display: none !important; }
     .no-print { display: none !important; }
     body { background: #fff !important; }
+    /* Sin esto el navegador imprime las barras en blanco: por defecto descarta
+       los fondos de color. El porcentaje va ademas como texto, asi que aunque
+       el usuario desactive los graficos de fondo no se pierde el dato. */
+    .barra-pista, .barra-logro, .barra-umbral {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
   }
 </style>
 
@@ -26,6 +71,43 @@
 
 <h1 class="h3 mb-1">{{ nombre or "(sin nombre)" }}</h1>
 <p class="text-muted font-monospace mb-4">{{ hash_corto }}…</p>
+
+{% if barras %}
+<h2 class="h5 mb-1">Resumen de rendiciones</h2>
+<p class="text-muted small mb-3">
+  Cada barra se lee contra su propio umbral, marcado con la línea vertical: el
+  umbral se fija en cada sesión, así que los largos no son comparables entre
+  evaluaciones distintas. Solo aparecen las sesiones finalizadas.
+</p>
+
+<div class="card card-body mb-4">
+  {% for b in barras %}
+  <div class="row align-items-center g-2 {% if not loop.last %}mb-3{% endif %}">
+    <div class="col-12 col-md-4">
+      <div class="small">{{ b.evaluacion_titulo }}</div>
+      <div class="text-muted small">{{ b.fecha | hora_local }}</div>
+    </div>
+    <div class="col-10 col-md-7">
+      <div class="barra-pista">
+        <div class="barra-logro {{ 'aprobado' if b.aprobado else 'reprobado' }}"
+             style="width: {{ b.ancho }}%;"></div>
+        <div class="barra-umbral" style="left: {{ b.posicion_umbral }}%;"
+             title="Umbral de esta sesión: {{ b.umbral }}%"></div>
+      </div>
+    </div>
+    <div class="col-2 col-md-1 text-end">
+      <span class="small">{{ "%.0f"|format(b.porcentaje) }}%</span>
+    </div>
+  </div>
+  {% endfor %}
+
+  <div class="text-muted small mt-3">
+    <span class="marca-umbral"></span> umbral de cada evaluación
+    <span class="marca-color ms-3" style="background-color: #1d9e75;"></span> aprobado
+    <span class="marca-color ms-3" style="background-color: #e24b4a;"></span> reprobado
+  </div>
+</div>
+{% endif %}
 
 {% for grupo in grupos %}
   <h2 class="h5 mb-2">{{ grupo.evaluacion_titulo }}</h2>

@@ -246,6 +246,66 @@ def agrupar_historial(resultados_con_contexto) -> list[GrupoHistorial]:
     return resultado_final
 
 
+@dataclass(frozen=True)
+class BarraResumen:
+    """Una rendición FINALIZADA, lista para dibujarse como barra horizontal.
+
+    `ancho` y `posicion_umbral` vienen en porcentaje (0 a 100) del ancho total
+    de la pista, para que la plantilla los use tal cual como `width` y `left`
+    sin hacer aritmética.
+    """
+    evaluacion_titulo: str
+    fecha: object          # datetime, para mostrar
+    porcentaje: float
+    umbral: int
+    aprobado: bool
+    ancho: float           # 0-100
+    posicion_umbral: float # 0-100
+
+
+def _acotar(valor: float) -> float:
+    """Deja el valor dentro de 0-100. Un ancho negativo o mayor a 100 rompería
+    la barra visualmente; acotar es más seguro que confiar en el dato."""
+    return max(0.0, min(100.0, float(valor)))
+
+
+def barras_resumen(grupos) -> list[BarraResumen]:
+    """Aplana el historial agrupado en una lista cronológica de rendiciones,
+    para el panel de resumen que va sobre las tablas.
+
+    Deja FUERA las sesiones sin resultado (la persona ingresó pero no finalizó):
+    una barra vacía no informa de rendimiento y ensucia la comparación. Esas
+    filas siguen visibles como "Pendiente" en la tabla de su evaluación, que es
+    donde corresponde dejar constancia.
+
+    Cada barra carga su PROPIO umbral, porque el umbral se fija por sesión: dos
+    rendiciones de la misma evaluación pueden tener umbrales distintos, y un 65%
+    puede aprobar en una y reprobar en otra. Comparar largos de barra entre
+    evaluaciones distintas no significa nada; lo que cada barra afirma es su
+    posición respecto de su propia marca.
+
+    Se ordenan de la más antigua a la más nueva, mezclando evaluaciones: esa es
+    la línea de tiempo real de la persona.
+    """
+    barras = []
+    for grupo in grupos:
+        for fila in grupo.filas:
+            if fila.porcentaje is None or fila.aprobado is None:
+                continue
+            barras.append(
+                BarraResumen(
+                    evaluacion_titulo=grupo.evaluacion_titulo,
+                    fecha=fila.fecha,
+                    porcentaje=fila.porcentaje,
+                    umbral=fila.umbral,
+                    aprobado=bool(fila.aprobado),
+                    ancho=_acotar(fila.porcentaje),
+                    posicion_umbral=_acotar(fila.umbral),
+                )
+            )
+    return sorted(barras, key=lambda b: b.fecha)
+
+
 # Cabecera del CSV del historial. La evaluación va primera para que el CSV
 # conserve la agrupación al ordenarlo en Excel.
 ENCABEZADOS_CSV_HISTORIAL = [
