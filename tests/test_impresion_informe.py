@@ -107,6 +107,7 @@ def _sesion_con_n_preguntas(app, facilitador_id, n, codigo="PRN123"):
             sesion_id=s.id,
             nombre="Ana Soto",
             identificador_hash=hash_rut("15.432.198-5", "salt"),
+            ingreso_at=ahora_utc(),
         )
         part.finalizado_at = ahora_utc()
         db.session.add(part)

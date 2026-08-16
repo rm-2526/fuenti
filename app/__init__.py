@@ -52,6 +52,8 @@ def create_app(config_class: type = Config) -> Flask:
 
     # Importar modelos para que Alembic los detecte
     from app import models  # noqa: F401
+    # Registra el listener que crea las vistas de BD tras db.create_all().
+    from app import vistas  # noqa: F401
 
     # user_loader: cómo recuperar un Facilitador desde el id guardado en la sesión
     @login_manager.user_loader

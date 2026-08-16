@@ -1,0 +1,813 @@
+diff --git a/app/__init__.py b/app/__init__.py
+index e0efaf2..a3afa75 100644
+--- a/app/__init__.py
++++ b/app/__init__.py
+@@ -52,6 +52,8 @@ def create_app(config_class: type = Config) -> Flask:
+ 
+     # Importar modelos para que Alembic los detecte
+     from app import models  # noqa: F401
++    # Registra el listener que crea las vistas de BD tras db.create_all().
++    from app import vistas  # noqa: F401
+ 
+     # user_loader: cómo recuperar un Facilitador desde el id guardado en la sesión
+     @login_manager.user_loader
+diff --git a/app/models.py b/app/models.py
+index f902647..5b6f4ec 100644
+--- a/app/models.py
++++ b/app/models.py
+@@ -1,5 +1,8 @@
+ from datetime import datetime, timezone
+-from sqlalchemy import Integer, String, Text, Boolean, DateTime, Float, ForeignKey, UniqueConstraint, Index
++from sqlalchemy import (
++    Integer, String, Text, Boolean, DateTime, Float, ForeignKey,
++    UniqueConstraint, Index, CheckConstraint,
++)
+ from sqlalchemy.orm import Mapped, mapped_column, relationship
+ 
+ from werkzeug.security import generate_password_hash, check_password_hash
+@@ -58,6 +61,15 @@ class Evaluacion(db.Model):
+         back_populates="evaluacion", cascade="all, delete-orphan"
+     )
+ 
++    # El rango del umbral ya se valida en el formulario. Declararlo tambien aca
++    # cierra la via de escritura directa: un bug en el controlador o un script
++    # de mantencion no puede dejar una evaluacion con umbral 150.
++    __table_args__ = (
++        CheckConstraint(
++            "umbral_aprobacion BETWEEN 0 AND 100", name="ck_evaluacion_umbral"
++        ),
++    )
++
+ 
+ class Pregunta(db.Model):
+     __tablename__ = "pregunta"
+@@ -81,6 +93,12 @@ class Pregunta(db.Model):
+     )
+     respuestas: Mapped[list["Respuesta"]] = relationship(back_populates="pregunta")
+ 
++    __table_args__ = (
++        CheckConstraint(
++            "tipo IN ('opcion_multiple', 'verdadero_falso')", name="ck_pregunta_tipo"
++        ),
++    )
++
+ 
+ class Alternativa(db.Model):
+     __tablename__ = "alternativa"
+@@ -129,6 +147,20 @@ class Sesion(db.Model):
+         back_populates="sesion", cascade="all, delete-orphan"
+     )
+ 
++    # Los estados son los del diagrama de estados: no hay un tercero, y el
++    # cierre es irreversible. El CHECK cubre el primer invariante; el segundo
++    # (no volver de cerrada a abierta) es una transicion y no un valor, asi que
++    # sigue viviendo en el controlador.
++    __table_args__ = (
++        CheckConstraint("estado IN ('abierta', 'cerrada')", name="ck_sesion_estado"),
++        CheckConstraint(
++            "umbral_aprobacion BETWEEN 0 AND 100", name="ck_sesion_umbral"
++        ),
++        CheckConstraint(
++            "cerrada_at IS NULL OR cerrada_at >= abierta_at", name="ck_sesion_cierre"
++        ),
++    )
++
+ 
+ class Participante(db.Model):
+     __tablename__ = "participante"
+@@ -151,6 +183,10 @@ class Participante(db.Model):
+     __table_args__ = (
+         UniqueConstraint("sesion_id", "identificador_hash", name="uq_participante_sesion_hash"),
+         Index("ix_participante_identificador_hash", "identificador_hash"),
++        CheckConstraint(
++            "finalizado_at IS NULL OR finalizado_at >= ingreso_at",
++            name="ck_participante_fin",
++        ),
+     )
+ 
+ 
+@@ -218,4 +254,22 @@ class Resultado(db.Model):
+     analisis_ia: Mapped[str | None] = mapped_column(Text, nullable=True)
+     analisis_generado_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+ 
+-    participante: Mapped["Participante"] = relationship(back_populates="resultado")
+\ No newline at end of file
++    participante: Mapped["Participante"] = relationship(back_populates="resultado")
++
++    # La calificacion es el dato con valor probatorio del sistema: es lo que se
++    # le entrega a la organizacion. Estos CHECK son la ultima linea que impide
++    # persistir un informe aritmeticamente imposible.
++    # umbral_aprobacion admite NULL: la columna se agrego a una tabla que ya
++    # tenia filas (migracion 3a7f21c4bd90), asi que los resultados anteriores a
++    # esa fecha no lo tienen.
++    __table_args__ = (
++        CheckConstraint("nota BETWEEN 1.0 AND 7.0", name="ck_resultado_nota"),
++        CheckConstraint("porcentaje BETWEEN 0 AND 100", name="ck_resultado_pct"),
++        CheckConstraint(
++            "puntaje >= 0 AND puntaje <= total_preguntas", name="ck_resultado_puntaje"
++        ),
++        CheckConstraint(
++            "umbral_aprobacion IS NULL OR umbral_aprobacion BETWEEN 0 AND 100",
++            name="ck_resultado_umbral",
++        ),
++    )
+\ No newline at end of file
+diff --git a/app/vistas.py b/app/vistas.py
+new file mode 100644
+index 0000000..45d221d
+--- /dev/null
++++ b/app/vistas.py
+@@ -0,0 +1,158 @@
++"""Vistas de base de datos (I6).
++
++Por que existen. Hasta I5 toda operacion de datos se resolvia en Python: el
++panel de la sesion contaba participantes y promediaba notas en memoria, y el
++historial longitudinal se armaba con un join escrito en el blueprint. Eso
++funciona, pero paga dos costos: trae filas completas por la red en cada sondeo
++(cada 10 s, contra una base gestionada que cobra transferencia) y deja la
++definicion de "que es el historial de una persona" repartida entre el codigo de
++consulta y el de reporteria.
++
++Estas dos vistas mueven esa agregacion al motor. No agregan reglas de negocio
++nuevas: son la MISMA consulta, expresada una sola vez y del lado de la base.
++
++Portabilidad (RNF-12). Ambas son SQL estandar y corren igual en SQLite y en
++PostgreSQL. Los dos puntos donde los motores difieren y que estan resueltos aca:
++
++  - ROUND(x, n) en PostgreSQL no acepta double precision, solo numeric, y
++    Resultado.nota es Float. Por eso va CAST(... AS numeric) alrededor del
++    AVG(), que SQLite acepta sin ruido (le da afinidad numerica).
++  - El booleano: SQLite lo guarda como 0/1 y PostgreSQL como boolean real. Por
++    eso el conteo de aprobados usa CASE WHEN res.aprobado THEN 1 ELSE 0 END,
++    que es verdadero en los dos, en vez de comparar contra 1 o contra TRUE.
++
++Como se crean. En un solo lugar (SQL_VISTAS) y desde dos caminos:
++
++  - En produccion, la migracion de Alembic las ejecuta.
++  - En los tests, que levantan el esquema con db.create_all() y no con
++    migraciones, un listener 'after_create' sobre la metadata las crea tambien.
++
++Sin ese listener las vistas existirian en produccion y no en las pruebas, que es
++exactamente la clase de divergencia que este proyecto trata de no tener.
++
++Las vistas NO se mapean como modelos del ORM a proposito: db.create_all() las
++trataria como tablas e intentaria crearlas, y el autogenerate de Alembic se
++confundiria. Se consultan con SQL explicito a traves de los helpers de abajo.
++"""
++
++from sqlalchemy import event, text
++
++from app.models import db
++
++
++# ---------------------------------------------------------------------------
++# Definiciones
++# ---------------------------------------------------------------------------
++
++# OE4: reune las participaciones de una misma persona a traves de sesiones y
++# evaluaciones distintas. Dos decisiones que vienen del diseno, no del SQL:
++#   - Lee de la foto congelada (res.evaluacion_titulo, res.umbral_aprobacion),
++#     no de la evaluacion viva, para que editar la evaluacion no altere el
++#     historial ya emitido.
++#   - Expone facilitador_id para que el filtro de propiedad (V-11) se aplique
++#     dentro de la consulta y no despues, en memoria.
++# Solo sesiones cerradas: una sesion abierta todavia puede cambiar.
++V_HISTORIAL = """
++CREATE VIEW v_historial_longitudinal AS
++SELECT p.identificador_hash        AS identificador_hash,
++       e.facilitador_id            AS facilitador_id,
++       s.id                        AS sesion_id,
++       s.codigo                    AS codigo,
++       s.cerrada_at                AS cerrada_at,
++       res.evaluacion_titulo       AS evaluacion_titulo,
++       res.umbral_aprobacion       AS umbral_aprobacion,
++       res.puntaje                 AS puntaje,
++       res.total_preguntas         AS total_preguntas,
++       res.porcentaje              AS porcentaje,
++       res.nota                    AS nota,
++       res.aprobado                AS aprobado,
++       p.nombre                    AS nombre_referencia
++FROM participante p
++JOIN sesion s       ON s.id = p.sesion_id
++JOIN evaluacion e   ON e.id = s.evaluacion_id
++JOIN resultado res  ON res.participante_id = p.id
++WHERE s.estado = 'cerrada'
++"""
++
++# Alimenta el panel de monitoreo y el encabezado del informe de sesion.
++# Devuelve UNA fila por sesion donde antes se traian N filas de participante.
++# LEFT JOIN para que una sesion recien abierta (sin nadie dentro) siga
++# apareciendo con ingresados = 0 en vez de desaparecer del panel.
++V_RESUMEN = """
++CREATE VIEW v_resumen_sesion AS
++SELECT s.id                                            AS sesion_id,
++       s.codigo                                        AS codigo,
++       s.estado                                        AS estado,
++       s.umbral_aprobacion                             AS umbral_aprobacion,
++       COUNT(p.id)                                     AS ingresados,
++       COUNT(res.id)                                   AS finalizados,
++       ROUND(CAST(AVG(res.nota) AS numeric), 1)        AS nota_promedio,
++       ROUND(CAST(AVG(res.porcentaje) AS numeric), 1)  AS logro_promedio,
++       SUM(CASE WHEN res.aprobado THEN 1 ELSE 0 END)   AS aprobados
++FROM sesion s
++LEFT JOIN participante p ON p.sesion_id = s.id
++LEFT JOIN resultado res  ON res.participante_id = p.id
++GROUP BY s.id, s.codigo, s.estado, s.umbral_aprobacion
++"""
++
++SQL_VISTAS = {
++    "v_historial_longitudinal": V_HISTORIAL,
++    "v_resumen_sesion": V_RESUMEN,
++}
++
++
++# ---------------------------------------------------------------------------
++# Creacion y borrado
++# ---------------------------------------------------------------------------
++
++def crear_vistas(conn):
++    """Crea las vistas. Idempotente: borra antes de crear."""
++    for nombre, sentencia in SQL_VISTAS.items():
++        conn.execute(text(f"DROP VIEW IF EXISTS {nombre}"))
++        conn.execute(text(sentencia))
++
++
++def eliminar_vistas(conn):
++    for nombre in SQL_VISTAS:
++        conn.execute(text(f"DROP VIEW IF EXISTS {nombre}"))
++
++
++@event.listens_for(db.metadata, "after_create")
++def _crear_vistas_tras_create_all(target, connection, **kw):
++    """db.create_all() arma las tablas; esto agrega las vistas encima.
++
++    Es lo que hace que los tests vean el mismo esquema que produccion.
++    """
++    crear_vistas(connection)
++
++
++# ---------------------------------------------------------------------------
++# Consultas
++# ---------------------------------------------------------------------------
++
++def historial_de(identificador_hash, facilitador_id):
++    """Trayectoria de una persona, restringida a lo que este facilitador posee.
++
++    Devuelve filas ordenadas de la mas reciente a la mas antigua. La comparacion
++    entre sesiones se hace por 'porcentaje' y no por 'nota': dos sesiones de la
++    misma evaluacion pueden haber fijado umbrales distintos, asi que sus notas
++    no son comparables entre si.
++    """
++    return db.session.execute(
++        text(
++            """
++            SELECT * FROM v_historial_longitudinal
++            WHERE identificador_hash = :h AND facilitador_id = :f
++            ORDER BY cerrada_at DESC
++            """
++        ),
++        {"h": identificador_hash, "f": facilitador_id},
++    ).mappings().all()
++
++
++def resumen_de(sesion_id):
++    """Agregados de una sesion en una sola fila. None si la sesion no existe."""
++    return db.session.execute(
++        text("SELECT * FROM v_resumen_sesion WHERE sesion_id = :s"),
++        {"s": sesion_id},
++    ).mappings().first()
+diff --git a/migrations/versions/a7d3e91b52c4_objetos_bd_i6.py b/migrations/versions/a7d3e91b52c4_objetos_bd_i6.py
+new file mode 100644
+index 0000000..a4fc1fb
+--- /dev/null
++++ b/migrations/versions/a7d3e91b52c4_objetos_bd_i6.py
+@@ -0,0 +1,78 @@
++"""Objetos de base de datos: vistas de reporteria y restricciones CHECK (I6)
++
++Hasta aca la base de datos era solo almacenamiento: guardaba filas y el rango de
++cada valor se validaba unicamente en Python. Esta migracion agrega las dos cosas
++que faltaban para que la base participe de la logica del sistema:
++
++  1. Dos vistas que resuelven en el motor la agregacion del panel de sesion y la
++     consolidacion del historial longitudinal, definidas una sola vez en
++     app/vistas.py.
++  2. Restricciones CHECK que declaran en el esquema los invariantes que hasta
++     ahora solo vivian en el controlador.
++
++Sobre SQLite. Agregar un CHECK a una tabla que ya existe obliga a reconstruirla:
++SQLite no tiene ALTER TABLE ADD CONSTRAINT. batch_alter_table hace ese baile
++(crea tabla nueva, copia, renombra) de forma transparente, y en PostgreSQL emite
++el ALTER TABLE directo. Por eso todo el bloque va en modo batch aunque en
++produccion no haga falta.
++
++Cuidado con los datos existentes. Si alguna fila ya viola un CHECK, la migracion
++falla al aplicarse, que es el comportamiento correcto: significa que hay datos
++malos que hay que revisar antes, no una restriccion que haya que relajar.
++
++Revision ID: a7d3e91b52c4
++Revises: d2e4f6a80b31
++"""
++
++from alembic import op
++
++from app.vistas import crear_vistas, eliminar_vistas
++
++
++revision = "a7d3e91b52c4"
++down_revision = "d2e4f6a80b31"
++branch_labels = None
++depends_on = None
++
++
++# (tabla, nombre de la restriccion, condicion)
++CHECKS = [
++    ("evaluacion", "ck_evaluacion_umbral", "umbral_aprobacion BETWEEN 0 AND 100"),
++    ("pregunta", "ck_pregunta_tipo", "tipo IN ('opcion_multiple', 'verdadero_falso')"),
++    ("sesion", "ck_sesion_estado", "estado IN ('abierta', 'cerrada')"),
++    ("sesion", "ck_sesion_umbral", "umbral_aprobacion BETWEEN 0 AND 100"),
++    ("sesion", "ck_sesion_cierre", "cerrada_at IS NULL OR cerrada_at >= abierta_at"),
++    (
++        "participante",
++        "ck_participante_fin",
++        "finalizado_at IS NULL OR finalizado_at >= ingreso_at",
++    ),
++    ("resultado", "ck_resultado_nota", "nota BETWEEN 1.0 AND 7.0"),
++    ("resultado", "ck_resultado_pct", "porcentaje BETWEEN 0 AND 100"),
++    (
++        "resultado",
++        "ck_resultado_puntaje",
++        "puntaje >= 0 AND puntaje <= total_preguntas",
++    ),
++    (
++        "resultado",
++        "ck_resultado_umbral",
++        "umbral_aprobacion IS NULL OR umbral_aprobacion BETWEEN 0 AND 100",
++    ),
++]
++
++
++def upgrade():
++    for tabla, nombre, condicion in CHECKS:
++        with op.batch_alter_table(tabla) as batch:
++            batch.create_check_constraint(nombre, condicion)
++
++    crear_vistas(op.get_bind())
++
++
++def downgrade():
++    eliminar_vistas(op.get_bind())
++
++    for tabla, nombre, _ in reversed(CHECKS):
++        with op.batch_alter_table(tabla) as batch:
++            batch.drop_constraint(nombre, type_="check")
+diff --git a/tests/test_db_constraints.py b/tests/test_db_constraints.py
+new file mode 100644
+index 0000000..fa39914
+--- /dev/null
++++ b/tests/test_db_constraints.py
+@@ -0,0 +1,232 @@
++"""Pruebas de las restricciones declarativas del esquema (I6).
++
++Estas pruebas no pasan por el controlador a proposito: escriben directo contra
++la base. Esa es justamente la via que las restricciones tienen que cubrir, la
++que queda abierta cuando el bug esta en el codigo de aplicacion o cuando alguien
++corre un script de mantencion a mano.
++
++Si una de estas pruebas falla con 'IntegrityError no fue lanzado', significa que
++la restriccion no llego a la base: en produccion, que la migracion no se aplico;
++en local, que falta en __table_args__.
++"""
++
++from datetime import datetime, timedelta, timezone
++
++import pytest
++from sqlalchemy.exc import IntegrityError
++
++from app import db
++from app.models import Evaluacion, Participante, Pregunta, Resultado, Sesion
++
++
++def _ahora():
++    return datetime.now(timezone.utc).replace(tzinfo=None)
++
++
++def _evaluacion(facilitador, umbral=60):
++    ev = Evaluacion(
++        facilitador_id=facilitador.id, titulo="Evaluacion", umbral_aprobacion=umbral
++    )
++    db.session.add(ev)
++    db.session.commit()
++    return ev
++
++
++def _sesion(ev, codigo="ZZZ999"):
++    s = Sesion(
++        evaluacion_id=ev.id,
++        codigo=codigo,
++        estado="abierta",
++        umbral_aprobacion=60,
++        abierta_at=_ahora(),
++    )
++    db.session.add(s)
++    db.session.commit()
++    return s
++
++
++def _participante(sesion, hash_id="1" * 64):
++    p = Participante(sesion_id=sesion.id, identificador_hash=hash_id, nombre="Prueba")
++    db.session.add(p)
++    db.session.commit()
++    return p
++
++
++# ---------------------------------------------------------------------------
++# Umbral y tipo
++# ---------------------------------------------------------------------------
++
++@pytest.mark.parametrize("umbral", [-1, 101, 150])
++def test_umbral_de_evaluacion_fuera_de_rango(app, facilitador, umbral):
++    db.session.add(
++        Evaluacion(
++            facilitador_id=facilitador.id, titulo="Mala", umbral_aprobacion=umbral
++        )
++    )
++    with pytest.raises(IntegrityError):
++        db.session.commit()
++    db.session.rollback()
++
++
++def test_tipo_de_pregunta_no_soportado(app, facilitador):
++    ev = _evaluacion(facilitador)
++    db.session.add(
++        Pregunta(
++            evaluacion_id=ev.id, enunciado="Desarrolle", orden=1, tipo="desarrollo"
++        )
++    )
++    with pytest.raises(IntegrityError):
++        db.session.commit()
++    db.session.rollback()
++
++
++def test_estado_de_sesion_no_contemplado(app, facilitador):
++    """El diagrama de estados tiene dos estados. No hay un tercero."""
++    ev = _evaluacion(facilitador)
++    db.session.add(
++        Sesion(
++            evaluacion_id=ev.id,
++            codigo="PAUSA1",
++            estado="pausada",
++            umbral_aprobacion=60,
++            abierta_at=_ahora(),
++        )
++    )
++    with pytest.raises(IntegrityError):
++        db.session.commit()
++    db.session.rollback()
++
++
++# ---------------------------------------------------------------------------
++# Coherencia temporal
++# ---------------------------------------------------------------------------
++
++def test_cierre_anterior_a_la_apertura(app, facilitador):
++    ev = _evaluacion(facilitador)
++    ahora = _ahora()
++    db.session.add(
++        Sesion(
++            evaluacion_id=ev.id,
++            codigo="TIEMP1",
++            estado="cerrada",
++            umbral_aprobacion=60,
++            abierta_at=ahora,
++            cerrada_at=ahora - timedelta(hours=1),
++        )
++    )
++    with pytest.raises(IntegrityError):
++        db.session.commit()
++    db.session.rollback()
++
++
++def test_finalizacion_anterior_al_ingreso(app, facilitador):
++    s = _sesion(_evaluacion(facilitador))
++    ahora = _ahora()
++    db.session.add(
++        Participante(
++            sesion_id=s.id,
++            identificador_hash="2" * 64,
++            nombre="Viajero del tiempo",
++            ingreso_at=ahora,
++            finalizado_at=ahora - timedelta(minutes=5),
++        )
++    )
++    with pytest.raises(IntegrityError):
++        db.session.commit()
++    db.session.rollback()
++
++
++# ---------------------------------------------------------------------------
++# Calificacion: el dato con valor probatorio
++# ---------------------------------------------------------------------------
++
++@pytest.mark.parametrize("nota", [0.9, 7.1, 12.0])
++def test_nota_fuera_de_la_escala_chilena(app, facilitador, nota):
++    p = _participante(_sesion(_evaluacion(facilitador)))
++    db.session.add(
++        Resultado(
++            participante_id=p.id,
++            puntaje=5,
++            total_preguntas=10,
++            porcentaje=50.0,
++            nota=nota,
++            aprobado=False,
++        )
++    )
++    with pytest.raises(IntegrityError):
++        db.session.commit()
++    db.session.rollback()
++
++
++def test_puntaje_mayor_que_el_total_de_preguntas(app, facilitador):
++    """11 aciertos sobre 10 preguntas es aritmeticamente imposible."""
++    p = _participante(_sesion(_evaluacion(facilitador)))
++    db.session.add(
++        Resultado(
++            participante_id=p.id,
++            puntaje=11,
++            total_preguntas=10,
++            porcentaje=100.0,
++            nota=7.0,
++            aprobado=True,
++        )
++    )
++    with pytest.raises(IntegrityError):
++        db.session.commit()
++    db.session.rollback()
++
++
++def test_porcentaje_fuera_de_rango(app, facilitador):
++    p = _participante(_sesion(_evaluacion(facilitador)))
++    db.session.add(
++        Resultado(
++            participante_id=p.id,
++            puntaje=10,
++            total_preguntas=10,
++            porcentaje=120.0,
++            nota=7.0,
++            aprobado=True,
++        )
++    )
++    with pytest.raises(IntegrityError):
++        db.session.commit()
++    db.session.rollback()
++
++
++def test_resultado_valido_se_persiste(app, facilitador):
++    """Contraprueba: las restricciones no deben bloquear lo legitimo."""
++    p = _participante(_sesion(_evaluacion(facilitador)))
++    db.session.add(
++        Resultado(
++            participante_id=p.id,
++            puntaje=8,
++            total_preguntas=10,
++            porcentaje=80.0,
++            nota=5.6,
++            aprobado=True,
++            evaluacion_titulo="Evaluacion",
++            umbral_aprobacion=60,
++        )
++    )
++    db.session.commit()
++
++    assert db.session.get(Resultado, 1).nota == 5.6
++
++
++def test_umbral_nulo_en_resultado_antiguo_es_valido(app, facilitador):
++    """Los resultados anteriores a la migracion del umbral no lo tienen."""
++    p = _participante(_sesion(_evaluacion(facilitador)))
++    db.session.add(
++        Resultado(
++            participante_id=p.id,
++            puntaje=6,
++            total_preguntas=10,
++            porcentaje=60.0,
++            nota=4.0,
++            aprobado=True,
++            umbral_aprobacion=None,
++        )
++    )
++    db.session.commit()
++
++    assert db.session.get(Resultado, 1).umbral_aprobacion is None
+diff --git a/tests/test_db_vistas.py b/tests/test_db_vistas.py
+new file mode 100644
+index 0000000..5926664
+--- /dev/null
++++ b/tests/test_db_vistas.py
+@@ -0,0 +1,183 @@
++"""Pruebas de las vistas de base de datos (I6).
++
++Lo que se verifica no es que la vista "funcione", sino que diga lo mismo que
++decia el codigo Python al que reemplaza. Una vista que agrega distinto que el
++modulo de estadisticas seria peor que no tenerla: introduciria dos verdades.
++"""
++
++from datetime import datetime, timedelta, timezone
++
++import pytest
++
++from app import db
++from app.models import (
++    Alternativa,
++    Evaluacion,
++    Participante,
++    Pregunta,
++    Resultado,
++    Sesion,
++)
++from app.vistas import historial_de, resumen_de
++
++
++def _ahora():
++    return datetime.now(timezone.utc).replace(tzinfo=None)
++
++
++def _evaluacion(facilitador, titulo="Prevencion de riesgos", umbral=60):
++    ev = Evaluacion(facilitador_id=facilitador.id, titulo=titulo, umbral_aprobacion=umbral)
++    db.session.add(ev)
++    db.session.flush()
++    pregunta = Pregunta(evaluacion_id=ev.id, enunciado="Enunciado", orden=1)
++    db.session.add(pregunta)
++    db.session.flush()
++    db.session.add(Alternativa(pregunta_id=pregunta.id, texto="A", es_correcta=True, orden=1))
++    db.session.add(Alternativa(pregunta_id=pregunta.id, texto="B", es_correcta=False, orden=2))
++    db.session.commit()
++    return ev
++
++
++def _sesion(ev, codigo, estado="cerrada", umbral=60):
++    abierta = _ahora() - timedelta(hours=2)
++    s = Sesion(
++        evaluacion_id=ev.id,
++        codigo=codigo,
++        estado=estado,
++        umbral_aprobacion=umbral,
++        abierta_at=abierta,
++        cerrada_at=abierta + timedelta(hours=1) if estado == "cerrada" else None,
++    )
++    db.session.add(s)
++    db.session.commit()
++    return s
++
++
++def _participacion(sesion, hash_id, nombre, puntaje, total, porcentaje, nota, aprobado):
++    p = Participante(
++        sesion_id=sesion.id,
++        identificador_hash=hash_id,
++        nombre=nombre,
++        ingreso_at=_ahora() - timedelta(minutes=30),
++        finalizado_at=_ahora() - timedelta(minutes=20),
++    )
++    db.session.add(p)
++    db.session.flush()
++    db.session.add(
++        Resultado(
++            participante_id=p.id,
++            puntaje=puntaje,
++            total_preguntas=total,
++            porcentaje=porcentaje,
++            nota=nota,
++            aprobado=aprobado,
++            evaluacion_titulo=sesion.evaluacion.titulo,
++            umbral_aprobacion=sesion.umbral_aprobacion,
++        )
++    )
++    db.session.commit()
++    return p
++
++
++def test_las_vistas_existen_tras_create_all(app):
++    """Las pruebas levantan el esquema con create_all, no con migraciones.
++
++    Si este test falla, el listener after_create de app/vistas.py no se
++    registro y las vistas existirian solo en produccion.
++    """
++    assert resumen_de(999) is None  # no explota: la vista existe, la sesion no
++
++
++def test_historial_reune_sesiones_distintas_de_la_misma_persona(app, facilitador):
++    hash_id = "a" * 64
++    ev1 = _evaluacion(facilitador, "Prevencion de riesgos")
++    ev2 = _evaluacion(facilitador, "Datos personales", umbral=70)
++    s1 = _sesion(ev1, "AAA111")
++    s2 = _sesion(ev2, "BBB222", umbral=70)
++
++    _participacion(s1, hash_id, "Luis Munoz", 8, 10, 80.0, 5.6, True)
++    _participacion(s2, hash_id, "L. Munoz", 6, 10, 60.0, 3.7, False)
++
++    filas = historial_de(hash_id, facilitador.id)
++
++    assert len(filas) == 2
++    titulos = {f["evaluacion_titulo"] for f in filas}
++    assert titulos == {"Prevencion de riesgos", "Datos personales"}
++    # El umbral viaja con cada fila justamente porque puede diferir entre
++    # sesiones: por eso el historial se compara por porcentaje y no por nota.
++    assert {f["umbral_aprobacion"] for f in filas} == {60, 70}
++
++
++def test_historial_excluye_sesiones_abiertas(app, facilitador):
++    hash_id = "b" * 64
++    ev = _evaluacion(facilitador)
++    abierta = _sesion(ev, "CCC333", estado="abierta")
++    _participacion(abierta, hash_id, "Ana Rojas", 9, 10, 90.0, 6.4, True)
++
++    assert historial_de(hash_id, facilitador.id) == []
++
++
++def test_historial_respeta_la_propiedad_del_facilitador(app, facilitador):
++    """V-11: un facilitador no puede ver participaciones de otro."""
++    from app.models import Facilitador
++
++    otro = Facilitador(email="otro@fuenti.cl", nombre="Otro")
++    otro.set_password("clave-de-prueba")
++    db.session.add(otro)
++    db.session.commit()
++
++    hash_id = "c" * 64
++    ev = _evaluacion(facilitador)
++    s = _sesion(ev, "DDD444")
++    _participacion(s, hash_id, "Carla Perez", 7, 10, 70.0, 4.5, True)
++
++    assert len(historial_de(hash_id, facilitador.id)) == 1
++    assert historial_de(hash_id, otro.id) == []
++
++
++def test_resumen_coincide_con_el_calculo_en_python(app, facilitador):
++    """La vista debe dar lo mismo que agregar las filas en memoria."""
++    ev = _evaluacion(facilitador)
++    s = _sesion(ev, "EEE555")
++    _participacion(s, "d" * 64, "Uno", 8, 10, 80.0, 5.6, True)
++    _participacion(s, "e" * 64, "Dos", 5, 10, 50.0, 3.5, False)
++    _participacion(s, "f" * 64, "Tres", 10, 10, 100.0, 7.0, True)
++
++    fila = resumen_de(s.id)
++
++    resultados = [p.resultado for p in s.participantes if p.resultado]
++    esperado_promedio = round(sum(r.nota for r in resultados) / len(resultados), 1)
++
++    assert fila["ingresados"] == 3
++    assert fila["finalizados"] == 3
++    assert fila["aprobados"] == 2
++    assert float(fila["nota_promedio"]) == pytest.approx(esperado_promedio)
++    assert float(fila["logro_promedio"]) == pytest.approx(76.7, abs=0.1)
++
++
++def test_resumen_incluye_sesion_sin_participantes(app, facilitador):
++    """Una sesion recien abierta debe aparecer en el panel con cero, no faltar."""
++    ev = _evaluacion(facilitador)
++    s = _sesion(ev, "FFF666", estado="abierta")
++
++    fila = resumen_de(s.id)
++
++    assert fila is not None
++    assert fila["ingresados"] == 0
++    assert fila["finalizados"] == 0
++    assert fila["nota_promedio"] is None
++
++
++def test_resumen_cuenta_ingresados_sin_resultado(app, facilitador):
++    """Quien entro pero no envio cuenta como ingresado y no como finalizado."""
++    ev = _evaluacion(facilitador)
++    s = _sesion(ev, "GGG777", estado="abierta")
++    db.session.add(
++        Participante(sesion_id=s.id, identificador_hash="0" * 64, nombre="Sin enviar")
++    )
++    db.session.commit()
++
++    fila = resumen_de(s.id)
++
++    assert fila["ingresados"] == 1
++    assert fila["finalizados"] == 0
+diff --git a/tests/test_impresion_informe.py b/tests/test_impresion_informe.py
+index 681e115..6b35c77 100644
+--- a/tests/test_impresion_informe.py
++++ b/tests/test_impresion_informe.py
+@@ -107,6 +107,7 @@ def _sesion_con_n_preguntas(app, facilitador_id, n, codigo="PRN123"):
+             sesion_id=s.id,
+             nombre="Ana Soto",
+             identificador_hash=hash_rut("15.432.198-5", "salt"),
++            ingreso_at=ahora_utc(),
+         )
+         part.finalizado_at = ahora_utc()
+         db.session.add(part)
+diff --git a/tests/test_resumen_historial.py b/tests/test_resumen_historial.py
+index 87e606f..24f8c1f 100644
+--- a/tests/test_resumen_historial.py
++++ b/tests/test_resumen_historial.py
+@@ -155,6 +155,7 @@ def _persona_con_rendicion(app, facilitador_id, hash_id, finaliza=True):
+             sesion_id=s.id,
+             identificador_hash=hash_id,
+             nombre="Ana Pérez",
++            ingreso_at=datetime(2026, 3, 12),
+             finalizado_at=datetime(2026, 3, 12) if finaliza else None,
+         )
+         db.session.add(part)

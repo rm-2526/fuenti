@@ -155,6 +155,7 @@ def _persona_con_rendicion(app, facilitador_id, hash_id, finaliza=True):
             sesion_id=s.id,
             identificador_hash=hash_id,
             nombre="Ana Pérez",
+            ingreso_at=datetime(2026, 3, 12),
             finalizado_at=datetime(2026, 3, 12) if finaliza else None,
         )
         db.session.add(part)

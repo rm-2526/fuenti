@@ -1,5 +1,8 @@
 from datetime import datetime, timezone
-from sqlalchemy import Integer, String, Text, Boolean, DateTime, Float, ForeignKey, UniqueConstraint, Index
+from sqlalchemy import (
+    Integer, String, Text, Boolean, DateTime, Float, ForeignKey,
+    UniqueConstraint, Index, CheckConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -58,6 +61,15 @@ class Evaluacion(db.Model):
         back_populates="evaluacion", cascade="all, delete-orphan"
     )
 
+    # El rango del umbral ya se valida en el formulario. Declararlo tambien aca
+    # cierra la via de escritura directa: un bug en el controlador o un script
+    # de mantencion no puede dejar una evaluacion con umbral 150.
+    __table_args__ = (
+        CheckConstraint(
+            "umbral_aprobacion BETWEEN 0 AND 100", name="ck_evaluacion_umbral"
+        ),
+    )
+
 
 class Pregunta(db.Model):
     __tablename__ = "pregunta"
@@ -80,6 +92,12 @@ class Pregunta(db.Model):
         back_populates="pregunta", cascade="all, delete-orphan"
     )
     respuestas: Mapped[list["Respuesta"]] = relationship(back_populates="pregunta")
+
+    __table_args__ = (
+        CheckConstraint(
+            "tipo IN ('opcion_multiple', 'verdadero_falso')", name="ck_pregunta_tipo"
+        ),
+    )
 
 
 class Alternativa(db.Model):
@@ -129,6 +147,20 @@ class Sesion(db.Model):
         back_populates="sesion", cascade="all, delete-orphan"
     )
 
+    # Los estados son los del diagrama de estados: no hay un tercero, y el
+    # cierre es irreversible. El CHECK cubre el primer invariante; el segundo
+    # (no volver de cerrada a abierta) es una transicion y no un valor, asi que
+    # sigue viviendo en el controlador.
+    __table_args__ = (
+        CheckConstraint("estado IN ('abierta', 'cerrada')", name="ck_sesion_estado"),
+        CheckConstraint(
+            "umbral_aprobacion BETWEEN 0 AND 100", name="ck_sesion_umbral"
+        ),
+        CheckConstraint(
+            "cerrada_at IS NULL OR cerrada_at >= abierta_at", name="ck_sesion_cierre"
+        ),
+    )
+
 
 class Participante(db.Model):
     __tablename__ = "participante"
@@ -151,6 +183,10 @@ class Participante(db.Model):
     __table_args__ = (
         UniqueConstraint("sesion_id", "identificador_hash", name="uq_participante_sesion_hash"),
         Index("ix_participante_identificador_hash", "identificador_hash"),
+        CheckConstraint(
+            "finalizado_at IS NULL OR finalizado_at >= ingreso_at",
+            name="ck_participante_fin",
+        ),
     )
 
 
@@ -219,3 +255,21 @@ class Resultado(db.Model):
     analisis_generado_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     participante: Mapped["Participante"] = relationship(back_populates="resultado")
+
+    # La calificacion es el dato con valor probatorio del sistema: es lo que se
+    # le entrega a la organizacion. Estos CHECK son la ultima linea que impide
+    # persistir un informe aritmeticamente imposible.
+    # umbral_aprobacion admite NULL: la columna se agrego a una tabla que ya
+    # tenia filas (migracion 3a7f21c4bd90), asi que los resultados anteriores a
+    # esa fecha no lo tienen.
+    __table_args__ = (
+        CheckConstraint("nota BETWEEN 1.0 AND 7.0", name="ck_resultado_nota"),
+        CheckConstraint("porcentaje BETWEEN 0 AND 100", name="ck_resultado_pct"),
+        CheckConstraint(
+            "puntaje >= 0 AND puntaje <= total_preguntas", name="ck_resultado_puntaje"
+        ),
+        CheckConstraint(
+            "umbral_aprobacion IS NULL OR umbral_aprobacion BETWEEN 0 AND 100",
+            name="ck_resultado_umbral",
+        ),
+    )
