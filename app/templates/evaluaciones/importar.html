@@ -1,12 +1,163 @@
 {% extends "base.html" %}
 {% block title %}Importar evaluación - Fuenti{% endblock %}
 {% block content %}
+{#
+  El prompt es UN solo texto continuo, no un formulario que arma un texto. Lo
+  que se lee es exactamente lo que se copia: los tramos ambar son regiones
+  editables dentro del propio prompt (contenteditable), no campos aparte. Asi no
+  hay dos fuentes de verdad que puedan diferir.
+
+  El formato del JSON vive tambien aca dentro, al final, porque es parte de la
+  instruccion que la IA debe respetar; por eso no se repite en un panel aparte.
+
+  El bloque se pliega solo cuando ya hay JSON pegado, para que la vista previa y
+  el formulario queden arriba al volver de una previsualizacion.
+#}
+<style>
+  /* El prompt completo se lee como un documento de maquina: una sola familia,
+     un solo tamano, un solo color. La unica variacion cromatica es el ambar,
+     que significa "esto lo reemplazas tu". */
+  .prompt-bloque {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .8125rem;
+    line-height: 1.6;
+    color: #2f333d;
+  }
+  .prompt-bloque p { margin: 0; }
+  .prompt-bloque .prompt-fijo {
+    white-space: pre-wrap;
+    font: inherit;
+    color: inherit;
+    margin: 1.6em 0 0;
+  }
+
+  .editable {
+    background-color: #fff8e6;
+    border-bottom: 2px solid #e0bb62;
+    border-radius: .15rem;
+    padding: 0 .25rem;
+    /* El texto largo de los detalles tiene que poder cortarse de linea dentro
+       del parrafo, como cualquier otro texto. */
+    display: inline;
+  }
+  .editable:focus {
+    outline: 2px solid #c99b30;
+    outline-offset: 1px;
+    background-color: #fffdf7;
+  }
+  .editable.vacio::before {
+    content: attr(data-marcador);
+    color: #a08344;
+    font-style: italic;
+  }
+
+  .marca-editable {
+    display: inline-block;
+    width: .75rem;
+    height: .75rem;
+    border-radius: .2rem;
+    background-color: #fff8e6;
+    border: 1px solid #e0bb62;
+    vertical-align: -1px;
+  }
+
+  .paso > summary { cursor: pointer; list-style: none; }
+  .paso > summary::-webkit-details-marker { display: none; }
+  .paso > summary::before {
+    content: "\25B8";
+    display: inline-block;
+    margin-right: .4rem;
+    color: #8a909c;
+    transition: transform .15s ease;
+  }
+  .paso[open] > summary::before { transform: rotate(90deg); }
+  @media (prefers-reduced-motion: reduce) {
+    .paso > summary::before { transition: none; }
+  }
+</style>
+
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h1 class="h3 mb-0">Importar evaluación</h1>
   <a href="{{ url_for('evaluaciones.listado') }}" class="btn btn-outline-secondary">
     Volver a la biblioteca
   </a>
 </div>
+
+<!-- Paso 1: el prompt. Abierto mientras no haya JSON pegado. -->
+<details class="paso mb-4" {% if not json_texto %}open{% endif %}>
+  <summary class="h5 mb-0">1. Genera las preguntas con una IA</summary>
+
+  <p class="text-muted mt-2 mb-3">
+    Este es el prompt completo. Reemplaza lo resaltado
+    (<span class="marca-editable"></span>) escribiendo directamente sobre él,
+    cópialo y pégalo en el asistente que uses (ChatGPT, Claude, Gemini…). Lo
+    demás va tal cual: es el formato que la IA debe respetar para que la
+    importación funcione. El título que escribas aquí se copia al paso 2.
+  </p>
+
+  <div class="card card-body prompt-bloque" id="promptBloque">
+    <p>Quiero un conjunto de preguntas para una evaluación.</p>
+    <p>Título de la evaluación:
+      <span class="editable vacio" id="pTitulo" contenteditable="true"
+            role="textbox" aria-label="Título de la evaluación"
+            data-marcador="ej: Seguridad en el laboratorio"></span>
+    </p>
+    <p>Contenido que deben cubrir:
+      <span class="editable vacio" id="pContenido" contenteditable="true"
+            role="textbox" aria-label="Contenido que deben cubrir las preguntas"
+            data-marcador="ej: uso de EPP, manejo de reactivos y qué hacer ante un derrame; para personal que recién ingresa"></span>
+    </p>
+    <p>Cantidad:
+      <span class="editable" id="pCantidad" contenteditable="true"
+            role="textbox" aria-label="Cantidad de preguntas">10</span> preguntas.
+    </p>
+
+    <pre class="prompt-fijo" id="promptFijo"><code>{% raw %}Combina preguntas de selección única y de verdadero/falso, intercalándolas a lo largo del listado sin un patrón fijo (no pongas primero todas las de un tipo).
+En las de verdadero/falso, redacta aproximadamente la mitad de las afirmaciones como falsas, y alterna cuál alternativa va primero: en unas "Verdadero" y en otras "Falso".
+Idioma: español.
+
+Responde únicamente con el JSON, sin explicaciones ni texto adicional, con esta estructura exacta:
+
+{
+  "preguntas": [
+    {
+      "enunciado": "¿Capital de Chile?",
+      "tipo": "opcion_multiple",
+      "alternativas": [
+        { "texto": "Santiago", "es_correcta": true },
+        { "texto": "Lima", "es_correcta": false }
+      ]
+    },
+    {
+      "enunciado": "La Luna es una estrella.",
+      "tipo": "verdadero_falso",
+      "alternativas": [
+        { "texto": "Falso", "es_correcta": true },
+        { "texto": "Verdadero", "es_correcta": false }
+      ]
+    }
+  ]
+}
+
+Reglas del formato:
+- "tipo" es "opcion_multiple" (de 2 a 6 alternativas) o "verdadero_falso" (exactamente 2).
+- Cada pregunta lleva exactamente UNA alternativa con "es_correcta": true.
+- En las verdadero_falso, los textos son "Verdadero" y "Falso".{% endraw %}</code></pre>
+  </div>
+
+  <div class="form-text mt-2">
+    Cantidad recomendada: 10 preguntas. Entre 5 y 15 se rinde cómodo en una
+    sesión. Mientras más específico sea el contenido, menos preguntas genéricas
+    devuelve la IA.
+  </div>
+
+  <div class="d-flex align-items-center gap-3 mt-3">
+    <button type="button" id="btnCopiarPrompt" class="btn btn-primary">
+      Copiar prompt
+    </button>
+    <span id="copiaAviso" class="text-success small d-none" role="status">Prompt copiado.</span>
+  </div>
+</details>
 
 {% if vista_previa %}
 <div class="card card-body mb-4 border-info">
@@ -42,113 +193,44 @@
 </div>
 {% endif %}
 
-<div class="row g-4">
-  <!-- Izquierda: formulario -->
-  <div class="col-lg-7">
-    <form method="POST" class="card card-body">
-      <div class="mb-3">
-        <label for="titulo" class="form-label">Título de la evaluación</label>
-        <input type="text" name="titulo" id="titulo" class="form-control"
-               maxlength="255" value="{{ titulo }}" required>
-      </div>
-
-      <div class="mb-3">
-        <label for="umbral" class="form-label">Umbral de aprobación (%)</label>
-        <input type="number" name="umbral" id="umbral" class="form-control"
-               min="0" max="100" value="{{ umbral }}" style="max-width: 160px;" required>
-        <div class="form-text">Porcentaje mínimo para aprobar (0 a 100).</div>
-      </div>
-
-      <div class="mb-3">
-        <label for="json" class="form-label">JSON con las preguntas</label>
-        <textarea name="json" id="json" class="form-control font-monospace"
-                  rows="14" spellcheck="false"
-                  placeholder='{ "preguntas": [ ... ] }' required>{{ json_texto }}</textarea>
-        <div class="form-text">
-          Pega aquí el JSON con las preguntas (por ejemplo, el que te generó una
-          IA con el prompt de más abajo). El título y el umbral son los que
-          escribes arriba. 
-        </div>
-      </div>
-
-      <div class="d-flex gap-2">
-        <button type="submit" name="accion" value="previsualizar"
-                class="btn btn-outline-primary">Vista previa</button>
-        <button type="submit" name="accion" value="importar"
-                class="btn btn-primary">Importar</button>
-      </div>
-    </form>
+<!-- Paso 2: el formulario de siempre. Mismos names, misma ruta, misma validacion. -->
+<h2 class="h5">2. Pega el JSON y crea la evaluación</h2>
+<form method="POST" class="card card-body">
+  <div class="mb-3">
+    <label for="json" class="form-label">JSON con las preguntas</label>
+    <textarea name="json" id="json" class="form-control font-monospace"
+              rows="10" spellcheck="false"
+              placeholder='{ "preguntas": [ ... ] }' required>{{ json_texto }}</textarea>
+    <div class="form-text">
+      Pega la respuesta de la IA completa. Si trae texto antes o después del
+      JSON, bórralo: debe empezar en <code>{</code> y terminar en <code>}</code>.
+    </div>
   </div>
 
-  <!-- Derecha: formato y reglas -->
-  <div class="col-lg-5">
-    <h2 class="h5">Formato del JSON</h2>
-    <p class="mb-2">El JSON debe contener las preguntas y alternativas, con esta
-    estructura:</p>
-    <pre class="bg-light border rounded p-3 overflow-auto"><code>{% raw %}{
-  "preguntas": [
-    {
-      "enunciado": "¿Capital de Chile?",
-      "tipo": "opcion_multiple",
-      "alternativas": [
-        { "texto": "Santiago", "es_correcta": true },
-        { "texto": "Lima", "es_correcta": false }
-      ]
-    },
-    {
-      "enunciado": "La Luna es una estrella.",
-      "tipo": "verdadero_falso",
-      "alternativas": [
-        { "texto": "Falso", "es_correcta": true },
-        { "texto": "Verdadero", "es_correcta": false }
-      ]
-    }
-  ]
-}{% endraw %}</code></pre>
-
-    <h2 class="h5 mt-3">Reglas para que el JSON sea válido</h2>
-    <ul class="mb-0">
-      <li>El JSON lleva una lista <code>preguntas</code> con al menos una.</li>
-      <li>Cada pregunta lleva <code>enunciado</code> y un <code>tipo</code>:
-        <code>"opcion_multiple"</code> (de 2 a 6 alternativas) o
-        <code>"verdadero_falso"</code> (exactamente 2).</li>
-      <li>En cada pregunta, <strong>una sola</strong> alternativa tiene
-        <code>"es_correcta": true</code>.</li>
-      <li>En las <code>verdadero_falso</code>, escribe los textos
-        <code>"Verdadero"</code> y <code>"Falso"</code>: se <strong>respeta el
-        orden</strong> en que los pongas, así que puedes dejar "Falso" en primer
-        lugar.</li>
-    </ul>
+  <div class="row g-3 mb-3">
+    <div class="col-sm-8">
+      <label for="titulo" class="form-label">Título de la evaluación</label>
+      <input type="text" name="titulo" id="titulo" class="form-control"
+             maxlength="255" value="{{ titulo }}" required>
+      <div class="form-text">Viene del prompt del paso 1; puedes cambiarlo aquí.</div>
+    </div>
+    <div class="col-sm-4">
+      <label for="umbral" class="form-label">Umbral de aprobación (%)</label>
+      <input type="number" name="umbral" id="umbral" class="form-control"
+             min="0" max="100" value="{{ umbral }}" required>
+      <div class="form-text">Mínimo para aprobar (0 a 100).</div>
+    </div>
   </div>
-</div>
 
-<h2 class="h5 mt-4">¿No tienes las preguntas? Genéralas con una IA</h2>
-<p class="mb-2">Con el siguiente prompt puedes generar, en cualquier asistente
-(ChatGPT, Claude, Gemini…), un JSON con preguntas de selección única y de
-verdadero/falso. Reemplaza el tema y la cantidad, y pega el resultado en el
-cuadro de arriba:</p>
-<pre class="bg-light border rounded p-3 overflow-auto"><code>{% raw %}Quiero un conjunto de preguntas para una evaluación.
-Tema: [ingresa el tema; ej: seguridad en el laboratorio].
-Cantidad: [ingresa la cantidad; ej: 5] preguntas, combinando preguntas de selección única y de verdadero/falso.
-Responde únicamente con el JSON, sin explicaciones ni texto adicional, con esta estructura:
-{ "preguntas": [ { "enunciado": "...", "tipo": "opcion_multiple" | "verdadero_falso",
-  "alternativas": [ { "texto": "...", "es_correcta": true|false } ] } ] }
-Reglas: cada pregunta debe tener exactamente UNA alternativa con es_correcta=true;
-opcion_multiple lleva de 2 a 6 alternativas; verdadero_falso lleva exactamente 2,
-con los textos "Verdadero" y "Falso", y marcas como correcta la que corresponda.
-Idioma: español.
-Importante, sobre el orden:
-- Intercala los dos tipos a lo largo del listado: NO pongas primero todas las de
-  selección única y después todas las de verdadero/falso. Que se vayan
-  alternando sin un patrón fijo, empezando indistintamente por cualquiera de los dos.
-- En las preguntas opcion_multiple NO dejes la alternativa correcta siempre en
-  primer lugar. Varía su posición de una pregunta a otra y repártela de forma
-  pareja entre todas las posiciones disponibles.
-- En las preguntas verdadero_falso redacta aproximadamente la mitad de las
-  afirmaciones como falsas, para que la respuesta correcta no sea siempre
-  "Verdadero".
-- Además, en las verdadero_falso alterna el orden de las alternativas: en unas
-  pon "Verdadero" primero y en otras "Falso" primero.
-- Antes de entregar el JSON revisa el conjunto completo y reordena si la
-  alternativa correcta quedó demasiadas veces en la misma posición.{% endraw %}</code></pre>
+  <div class="d-flex gap-2">
+    <button type="submit" name="accion" value="previsualizar"
+            class="btn btn-outline-primary">Vista previa</button>
+    <button type="submit" name="accion" value="importar"
+            class="btn btn-primary">Importar</button>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/importar_prompt.js') }}"></script>
 {% endblock %}
