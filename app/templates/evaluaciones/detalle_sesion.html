@@ -113,6 +113,9 @@
              |safe: no es entrada del usuario, lo genera segno a partir de una
              URL que construye la propia app. #}
           <div class="d-flex align-items-center gap-3 mb-3">
+            {# bg-white es DELIBERADO y no debe seguir al tema: el QR es negro
+               sobre blanco y los lectores necesitan ese contraste. Sobre fondo
+               oscuro muchos telefonos no lo leen. #}
             <div class="qr-sesion border rounded p-2 bg-white">
               {{ qr_ingreso | safe }}
             </div>

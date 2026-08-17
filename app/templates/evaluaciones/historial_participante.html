@@ -9,33 +9,48 @@
   /* Panel de resumen: una barra por rendicion finalizada. El largo se lee
      SIEMPRE contra la marca de su propio umbral, no contra las otras barras:
      evaluaciones distintas no son comparables entre si. */
+  :root {
+    --fuenti-pista: #f0efec;
+    --fuenti-aprobado: #1d9e75;
+    --fuenti-reprobado: #e24b4a;
+    --fuenti-umbral: #52514e;
+  }
+  [data-bs-theme="dark"] {
+    --fuenti-pista: #2b2f38;
+    --fuenti-aprobado: #2bbd8c;
+    --fuenti-reprobado: #f0706f;
+    --fuenti-umbral: #c9ccd4;
+  }
+
   .barra-pista {
     position: relative;
     height: 22px;
     border-radius: .25rem;
-    background-color: #f0efec;
+    background-color: var(--fuenti-pista);
     overflow: hidden;
   }
   .barra-logro {
     height: 100%;
     border-radius: .25rem;
   }
-  .barra-logro.aprobado { background-color: #1d9e75; }
-  .barra-logro.reprobado { background-color: #e24b4a; }
+  .barra-logro.aprobado { background-color: var(--fuenti-aprobado); }
+  .barra-logro.reprobado { background-color: var(--fuenti-reprobado); }
   .barra-umbral {
     position: absolute;
     top: -3px;
     bottom: -3px;
     width: 2px;
-    background-color: #52514e;
+    background-color: var(--fuenti-umbral);
   }
   .marca-umbral {
     display: inline-block;
     width: 2px;
     height: .7rem;
-    background-color: #52514e;
+    background-color: var(--fuenti-umbral);
     vertical-align: -1px;
   }
+  .marca-color.aprobado { background-color: var(--fuenti-aprobado); }
+  .marca-color.reprobado { background-color: var(--fuenti-reprobado); }
   .marca-color {
     display: inline-block;
     width: .7rem;
@@ -103,8 +118,8 @@
 
   <div class="text-muted small mt-3">
     <span class="marca-umbral"></span> umbral de cada evaluación
-    <span class="marca-color ms-3" style="background-color: #1d9e75;"></span> aprobado
-    <span class="marca-color ms-3" style="background-color: #e24b4a;"></span> reprobado
+    <span class="marca-color aprobado ms-3"></span> aprobado
+    <span class="marca-color reprobado ms-3"></span> reprobado
   </div>
 </div>
 {% endif %}

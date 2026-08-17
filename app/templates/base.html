@@ -1,6 +1,29 @@
 <!doctype html>
 <html lang="es">
 <head>
+  {#
+    Tema claro/oscuro. Este script va ANTES de cualquier CSS a proposito: si
+    corriera al final, la pagina se pintaria clara y recien despues cambiaria a
+    oscura, produciendo un destello blanco en cada navegacion.
+
+    Sin preferencia guardada manda la del sistema operativo. En cuanto el
+    usuario toca el boton, su eleccion queda en localStorage y pasa a mandar
+    ella.
+  #}
+  <script>
+    (function () {
+      var raiz = document.documentElement;
+      try {
+        var guardado = localStorage.getItem("fuenti-tema");
+        var oscuro = guardado
+          ? guardado === "oscuro"
+          : window.matchMedia("(prefers-color-scheme: dark)").matches;
+        raiz.setAttribute("data-bs-theme", oscuro ? "dark" : "light");
+      } catch (e) {
+        raiz.setAttribute("data-bs-theme", "light");  // localStorage bloqueado
+      }
+    })();
+  </script>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Fuenti{% endblock %}</title>
@@ -21,7 +44,19 @@
     estaba. Va DESPUES del CSS de Bootstrap para ganarle en especificidad.
   #}
   <style>
-    :root { --fuenti-tinta: #14161c; --fuenti-linea: #e8eaef; }
+    /* Los colores propios viven aqui como variables para que el tema oscuro
+       sea una sola redefinicion y no una copia de cada regla. Bootstrap 5.3 ya
+       adapta solo sus componentes con data-bs-theme; esto cubre lo nuestro. */
+    :root {
+      --fuenti-tinta: #14161c;
+      --fuenti-linea: #e8eaef;
+      --fuenti-navbar: #fff;
+    }
+    [data-bs-theme="dark"] {
+      --fuenti-tinta: #e6e8ee;
+      --fuenti-linea: #2b2f38;
+      --fuenti-navbar: #16181d;
+    }
 
     /* Jost solo en titulos y en la marca, igual que en la portada: el texto
        corrido se queda con la tipografia de sistema de Bootstrap. */
@@ -35,7 +70,7 @@
        portada. Los colores de los hijos se ajustan mas abajo para que sigan
        siendo legibles sobre blanco. */
     .navbar.bg-dark {
-      background-color: #fff !important;
+      background-color: var(--fuenti-navbar) !important;
       border-bottom: 1px solid var(--fuenti-linea);
     }
 
@@ -52,10 +87,19 @@
     /* El boton del nombre y el de iniciar sesion venian pensados para fondo
        oscuro (texto claro). Sobre blanco tienen que ir oscuros. */
     .navbar .dropdown-toggle.text-light { color: var(--fuenti-tinta) !important; }
-    .navbar .dropdown-toggle.text-light:hover { color: #000 !important; }
+    .navbar .dropdown-toggle.text-light:hover { color: var(--bs-emphasis-color) !important; }
+
+    /* Boton de tema: los dos iconos estan en el DOM y se muestra el que
+       corresponde. Asi el cambio es instantaneo y no depende de JS para
+       dibujar. */
+    .btn-tema { color: var(--fuenti-tinta); }
+    .btn-tema:hover { color: var(--bs-emphasis-color); }
+    .btn-tema svg { display: block; }
+    [data-bs-theme="light"] .icono-sol { display: none; }
+    [data-bs-theme="dark"] .icono-luna { display: none; }
   </style>
 </head>
-<body class="bg-light">
+<body class="bg-body-tertiary">
   {# Navbar minimalista: el logo lleva al Panel (que es el menú principal)
      y a la derecha, un desplegable con el primer nombre del facilitador.
      Al abrirlo se ve el nombre completo, el correo y "Cerrar sesión". #}
@@ -63,12 +107,29 @@
     <div class="container">
       <a class="navbar-brand marca-fuenti p-0" href="{{ url_for('dashboard') if current_user.is_authenticated else url_for('index') }}">
         <svg width="24" height="24" viewBox="0 0 26 26" fill="none" aria-hidden="true">
-          <circle cx="13" cy="13" r="12" stroke="#14161c" stroke-width="1.5"/>
+          <circle cx="13" cy="13" r="12" stroke="currentColor" stroke-width="1.5"/>
           <path d="M7.8 13.4l3.4 3.4 7-7.4" stroke="#0d6efd" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
         Fuenti
       </a>
+      {# El boton de tema esta siempre, con o sin sesion iniciada. #}
+      <div class="d-flex align-items-center gap-3">
+        <button type="button" id="btnTema" class="btn btn-link btn-tema p-0 border-0 text-decoration-none"
+                aria-label="Cambiar entre tema claro y oscuro" title="Cambiar tema">
+          <svg class="icono-luna" width="20" height="20" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+               stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
+          </svg>
+          <svg class="icono-sol" width="20" height="20" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+               stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="4.2"/>
+            <path d="M12 2.5v2M12 19.5v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2.5 12h2M19.5 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/>
+          </svg>
+        </button>
+
       {% if current_user.is_authenticated %}
         {% set _primer_nombre = current_user.nombre.split()[0] if current_user.nombre and current_user.nombre.split() else current_user.nombre %}
         <div class="dropdown">
@@ -89,6 +150,7 @@
       {% else %}
         <a class="btn btn-outline-primary btn-sm" href="{{ url_for('auth.login') }}">Iniciar sesión</a>
       {% endif %}
+      </div>
     </div>
   </nav>
 
@@ -201,6 +263,39 @@
           soloAviso: true,
         });
       };
+    })();
+  </script>
+
+  <script>
+    // Cambio de tema y regreso al claro para imprimir.
+    (function () {
+      var raiz = document.documentElement;
+      var btn = document.getElementById("btnTema");
+
+      if (btn) {
+        btn.addEventListener("click", function () {
+          var oscuro = raiz.getAttribute("data-bs-theme") === "dark";
+          raiz.setAttribute("data-bs-theme", oscuro ? "light" : "dark");
+          try {
+            localStorage.setItem("fuenti-tema", oscuro ? "claro" : "oscuro");
+          } catch (e) {
+            // Sin localStorage el tema no persiste entre paginas, pero el boton
+            // sigue funcionando en la actual.
+          }
+        });
+      }
+
+      // Un informe impreso en oscuro gasta tinta y se lee mal. Se fuerza el
+      // claro solo mientras dura la impresion y se restaura despues, asi vale
+      // para todos los componentes de Bootstrap sin reescribir su CSS.
+      var previo = null;
+      window.addEventListener("beforeprint", function () {
+        previo = raiz.getAttribute("data-bs-theme");
+        raiz.setAttribute("data-bs-theme", "light");
+      });
+      window.addEventListener("afterprint", function () {
+        if (previo) raiz.setAttribute("data-bs-theme", previo);
+      });
     })();
   </script>
 

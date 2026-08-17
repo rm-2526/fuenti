@@ -17,11 +17,30 @@
   /* El prompt completo se lee como un documento de maquina: una sola familia,
      un solo tamano, un solo color. La unica variacion cromatica es el ambar,
      que significa "esto lo reemplazas tu". */
+  :root {
+    --fuenti-editable-fondo: #fff8e6;
+    --fuenti-editable-borde: #e0bb62;
+    --fuenti-editable-foco: #c99b30;
+    --fuenti-editable-guia: #a08344;
+    --fuenti-editable-activo: #fffdf7;
+    --fuenti-prompt: #2f333d;
+  }
+  [data-bs-theme="dark"] {
+    /* El ambar claro sobre fondo oscuro deslumbra y baja el contraste del texto:
+       en oscuro se usa un tono terroso y el borde hace el trabajo de senalar. */
+    --fuenti-editable-fondo: #3a3220;
+    --fuenti-editable-borde: #b08d3c;
+    --fuenti-editable-foco: #e0bb62;
+    --fuenti-editable-guia: #c2a464;
+    --fuenti-editable-activo: #453b25;
+    --fuenti-prompt: #cfd3dc;
+  }
+
   .prompt-bloque {
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
     font-size: .8125rem;
     line-height: 1.6;
-    color: #2f333d;
+    color: var(--fuenti-prompt);
   }
   .prompt-bloque p { margin: 0; }
   .prompt-bloque .prompt-fijo {
@@ -32,8 +51,8 @@
   }
 
   .editable {
-    background-color: #fff8e6;
-    border-bottom: 2px solid #e0bb62;
+    background-color: var(--fuenti-editable-fondo);
+    border-bottom: 2px solid var(--fuenti-editable-borde);
     border-radius: .15rem;
     padding: 0 .25rem;
     /* El texto largo de los detalles tiene que poder cortarse de linea dentro
@@ -41,13 +60,13 @@
     display: inline;
   }
   .editable:focus {
-    outline: 2px solid #c99b30;
+    outline: 2px solid var(--fuenti-editable-foco);
     outline-offset: 1px;
-    background-color: #fffdf7;
+    background-color: var(--fuenti-editable-activo);
   }
   .editable.vacio::before {
     content: attr(data-marcador);
-    color: #a08344;
+    color: var(--fuenti-editable-guia);
     font-style: italic;
   }
 
@@ -56,8 +75,8 @@
     width: .75rem;
     height: .75rem;
     border-radius: .2rem;
-    background-color: #fff8e6;
-    border: 1px solid #e0bb62;
+    background-color: var(--fuenti-editable-fondo);
+    border: 1px solid var(--fuenti-editable-borde);
     vertical-align: -1px;
   }
 
