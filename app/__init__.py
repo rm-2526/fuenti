@@ -87,6 +87,13 @@ def create_app(config_class: type = Config) -> Flask:
     def index():
         return render_template("index.html")
     
+    @app.route("/ayuda")
+    @login_required
+    def ayuda():
+        """Manual del facilitador. Pagina fija, sin estado: es el destino del
+        modal de bienvenida y del enlace del menu."""
+        return render_template("ayuda.html")
+
     @app.route("/dashboard")
     @login_required
     def dashboard():

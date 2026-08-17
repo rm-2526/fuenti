@@ -73,5 +73,92 @@
     </div>
   </div>
   {% endif %}
+
+  {# Ayuda: ultima y en tono secundario a proposito. Va sin borde azul ni boton
+     solido para no competir con las acciones de arriba, que son a lo que se
+     entra a hacer. Visible siempre (no solo la primera vez, como el modal):
+     quien la necesita suele necesitarla en la tercera sesion, no en la
+     primera. #}
+  <div class="col-12 col-md-4">
+    <div class="card h-100">
+      <div class="card-body d-flex flex-column">
+        <h2 class="h5">Cómo funciona</h2>
+        <p class="small flex-grow-1">
+          El recorrido completo en cinco pasos, de crear una evaluación a leer
+          los informes.
+        </p>
+        <a href="{{ url_for('ayuda') }}"
+           class="btn btn-outline-primary align-self-start">
+          Ver la guía
+        </a>
+      </div>
+    </div>
+  </div>
 </div>
+
+{#
+  Bienvenida de primera vez. Va SOLO en el panel a proposito: un modal encima de
+  una sesion en curso o de un informe interrumpe justo a quien ya sabe lo que
+  hace. Se muestra una vez y no vuelve; la ayuda queda accesible desde el menu.
+
+  La marca vive en localStorage y no en la base de datos: no requiere migracion,
+  y el costo de equivocarse es minimo (reaparece una vez si entras desde otro
+  equipo). Si algun dia hace falta que sea exacto por persona, se cambia por una
+  columna en Facilitador.
+#}
+<div class="modal fade" id="modalBienvenida" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title fs-5">Te damos la bienvenida a Fuenti</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">
+          El recorrido son cinco pasos: preparas una evaluación, la abres para
+          recibir participantes, sigues el avance, cierras y lees los informes.
+        </p>
+        <p class="text-muted small mb-0">
+          Este aviso no volverá a aparecer. Puedes releerlo cuando quieras desde
+          <strong>Cómo funciona</strong>, en el menú de tu nombre.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+          Ahora no
+        </button>
+        <a href="{{ url_for('ayuda') }}" class="btn btn-primary">Ver cómo funciona</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    var CLAVE = "fuenti-bienvenida-vista";
+    var el = document.getElementById("modalBienvenida");
+    if (!el) return;
+
+    var vista;
+    try {
+      vista = localStorage.getItem(CLAVE);
+    } catch (e) {
+      // Sin localStorage no hay forma de recordar la decision. Antes que
+      // mostrar el modal en cada visita, se prefiere no mostrarlo: la ayuda
+      // sigue estando en el menu.
+      return;
+    }
+    if (vista) return;
+
+    // Se marca al abrir, no al cerrar: si la persona se va por el boton "Ver
+    // como funciona" (que navega a otra pagina), igual queda registrado.
+    try {
+      localStorage.setItem(CLAVE, new Date().toISOString());
+    } catch (e) {}
+
+    new bootstrap.Modal(el).show();
+  })();
+</script>
 {% endblock %}

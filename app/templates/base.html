@@ -144,6 +144,7 @@
               <span class="text-muted">{{ current_user.email }}</span>
             </li>
             <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="{{ url_for('ayuda') }}">Cómo funciona</a></li>
             <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">Cerrar sesión</a></li>
           </ul>
         </div>
