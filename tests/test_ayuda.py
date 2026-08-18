@@ -30,8 +30,8 @@ def test_la_ayuda_cubre_los_cinco_pasos(client, facilitador):
 
     assert "Cómo funciona Fuenti" in html
     for hito in [
-        "Prepara una evaluación",
-        "Ábrela como sesión",
+        "Crea una evaluación",
+        "Inicia una sesión",
         "Sigue el avance",
         "Cierra la sesión",
         "Lee los informes",

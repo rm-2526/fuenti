@@ -39,11 +39,50 @@
   /* Capturas: encuadradas para que se distingan de la interfaz real que las
      rodea. max-height evita que una captura muy alta empuje el texto del paso
      fuera de la pantalla. */
+  /* Todas las capturas ocupan la MISMA caja aunque se hayan tomado con
+     encuadres distintos. object-fit: contain escala sin recortar: la imagen
+     entra completa y el sobrante queda como margen neutro. Con "cover" se
+     verian igual de parejas, pero cortando bordes de la interfaz. */
   .captura {
-    max-width: 100%;
-    max-height: 320px;
+    display: block;
+    width: 100%;
+    height: 300px;
+    object-fit: contain;
+    object-position: center;
+    background-color: var(--bs-tertiary-bg);
     border-radius: .375rem;
     border: 1px solid var(--bs-border-color);
+    cursor: zoom-in;
+    transition: border-color .15s ease;
+  }
+  .captura:hover, .captura:focus-visible { border-color: var(--bs-primary); }
+
+  /* La lupa se apoya sobre la esquina de la imagen. El contenedor se ajusta al
+     ancho real de la imagen (no al de la columna) para que no quede flotando
+     lejos cuando la captura es angosta. */
+  .captura-marco { position: relative; display: block; line-height: 0; }
+  .captura-lupa {
+    position: absolute;
+    right: .5rem;
+    bottom: .5rem;
+    background-color: rgba(0, 0, 0, .6);
+    color: #fff;
+    border-radius: .25rem;
+    padding: .2rem .3rem;
+    line-height: 0;
+    pointer-events: none;  /* el clic lo recibe la imagen, no la lupa */
+  }
+
+  /* Ampliada: casi toda la pantalla. El ancho lo fija el dialogo y el alto lo
+     fija la imagen, para que no haya que hacer scroll dentro del modal. */
+  .modal-captura { max-width: 96vw; }
+  .modal-captura .modal-body { padding: .75rem; }
+  .modal-captura .modal-body img { max-height: 82vh; width: auto; }
+
+  @media print {
+    /* Ampliar no aplica en papel, y ahi conviene el alto natural. */
+    .captura-lupa { display: none; }
+    .captura { height: auto; background: none; }
   }
   figure { margin: 0 0 .5rem; }
   figcaption { font-size: .8125rem; color: var(--bs-secondary-color); }
@@ -57,111 +96,96 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h1 class="h3 mb-0">Cómo funciona Fuenti</h1>
   <div class="no-print d-flex gap-2">
-    <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
-      Imprimir
-    </button>
+    
     <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">Volver al panel</a>
   </div>
 </div>
 
 <p class="text-muted mb-4" style="max-width: 60ch;">
-  El recorrido completo son cinco pasos: preparas una evaluación, la abres para
-  recibir participantes, sigues el avance en vivo, cierras, y lees los
-  resultados. Todo lo demás son detalles de cada uno.
+  El recorrido completo son 5 pasos: preparas una evaluación, abres una sesión para
+  recibir participantes, sigues el avance en vivo, cierras la sesión, y puedes ver los
+  resultados.
 </p>
 
 <div class="card card-body mb-4">
   <div class="d-flex gap-3 mb-4 paso">
     <div class="paso-num">1</div>
     <div>
-      <h2 class="h5">Prepara una evaluación</h2>
+      <h2 class="h5">Crea una evaluación</h2>
       <p class="mb-2">
-        Una evaluación es el cuestionario: sus preguntas y sus alternativas. Se
-        crea una vez y se puede rendir muchas veces.
+        Es el cuestionario: preguntas y alternativas. Se crea una vez y se rinde muchas veces. Puedes escribirla a mano o generarla con IA usando el prompt que Fuenti te entrega.
       </p>
-      <p class="mb-2">
-        Tienes dos caminos, ambos en la <strong>Biblioteca</strong>. Puedes
-        escribir las preguntas a mano, uno por uno, o generarlas con una IA:
-        Fuenti te entrega un prompt listo donde solo completas el título, el
-        contenido y cuántas preguntas quieres. Lo pegas en ChatGPT, Claude o
-        Gemini, y traes de vuelta la respuesta.
-      </p>
-      <p class="text-muted small mb-0">
-        Antes de guardar, la vista previa te muestra cómo quedó. Nada se guarda
-        hasta que confirmas.
-      </p>
+      
 
-      {#
-        Captura pendiente. Para activarla: guarda la imagen en
-        app/static/img/ayuda/prompt-ia.png y descomenta el bloque de abajo.
-
-        <figure class="mt-3">
+      <figure class="mt-3">
+        <div class="captura-marco">
           <img src="{{ url_for('static', filename='img/ayuda/prompt-ia.png') }}"
-               alt="El prompt con los campos que completas resaltados." class="captura" loading="lazy">
-          <figcaption>El prompt con los campos que completas resaltados.</figcaption>
-        </figure>
-      #}
+               alt="El prompt con los campos que completas resaltados." class="captura" loading="lazy"
+               role="button" tabindex="0" title="Clic para ampliar">
+          <span class="captura-lupa">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21M8 10.5h5M10.5 8v5"/>
+            </svg>
+          </span>
+        </div>
+        <figcaption>El prompt con los campos que debes completar están resaltados.</figcaption>
+      </figure>
     </div>
   </div>
 
   <div class="d-flex gap-3 mb-4 paso">
     <div class="paso-num">2</div>
     <div>
-      <h2 class="h5">Ábrela como sesión</h2>
+      <h2 class="h5">Inicia una sesión</h2>
       <p class="mb-2">
-        Una <strong>sesión</strong> es una rendición concreta de esa evaluación:
-        este curso, este día. Al abrirla defines el
-        <strong>umbral de aprobación</strong>, el porcentaje mínimo para
-        aprobar.
-      </p>
-      <p class="mb-2">
-        Ese umbral queda fijo en la sesión y no cambia después, ni siquiera si
-        editas la evaluación. Es lo que te permite decirle a alguien "aprobaste
-        con 65%" y que eso siga siendo cierto meses más tarde. Por lo mismo, dos
-        sesiones de la misma evaluación pueden tener umbrales distintos.
-      </p>
-      <p class="mb-0">
-        Al abrirla obtienes un enlace y un código QR. Los participantes entran
-        por ahí con su RUT; no necesitan cuenta ni instalar nada.
+        Una sesión es una rendición concreta: este curso, este día. Al abrirla fijas el umbral de aprobación, que queda congelado ahí y no cambia después. Obtienes un enlace y un QR; los participantes entran con su RUT, sin cuenta ni instalar nada.
       </p>
 
-      {#
-        Captura pendiente. Para activarla: guarda la imagen en
-        app/static/img/ayuda/sesion-abierta.png y descomenta el bloque de abajo.
-
-        <figure class="mt-3">
+      <figure class="mt-3">
+        <div class="captura-marco">
           <img src="{{ url_for('static', filename='img/ayuda/sesion-abierta.png') }}"
-               alt="El enlace y el QR que se comparten con los participantes." class="captura" loading="lazy">
-          <figcaption>El enlace y el QR que se comparten con los participantes.</figcaption>
-        </figure>
-      #}
+               alt="El enlace y el QR que se comparten con los participantes." class="captura" loading="lazy"
+               role="button" tabindex="0" title="Clic para ampliar">
+          <span class="captura-lupa">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21M8 10.5h5M10.5 8v5"/>
+            </svg>
+          </span>
+        </div>
+        <figcaption>El enlace y el QR que se comparten con los participantes.</figcaption>
+      </figure>
     </div>
   </div>
 
   <div class="d-flex gap-3 mb-4 paso">
     <div class="paso-num">3</div>
     <div>
-      <h2 class="h5">Sigue el avance mientras responden</h2>
+      <h2 class="h5">Sigue el avance en vivo</h2>
       <p class="mb-2">
         La pantalla de la sesión se actualiza sola: cuántos entraron, cuántos ya
         terminaron y cómo va el grupo.
       </p>
       <p class="mb-0">
-        Mirar esto no es un adorno. Es lo que te dice cuándo cerrar: si faltan
-        dos personas por terminar, conviene esperar. Quien no haya finalizado al
-        momento del cierre queda sin resultado, y eso no se puede deshacer.
+        La pantalla se actualiza cada 10 segundos: quiénes entraron y quiénes terminaron. 
+        Revisa antes de cerrar la sesión: quien no haya finalizado queda sin informe ni resultado.
       </p>
 
-      {#
-        Captura pendiente. Para activarla: guarda la imagen en
-        app/static/img/ayuda/avance-sesion.png y descomenta el bloque de abajo.
-
-        <figure class="mt-3">
+      <figure class="mt-3">
+        <div class="captura-marco">
           <img src="{{ url_for('static', filename='img/ayuda/avance-sesion.png') }}"
-               alt="El avance del grupo mientras responden." class="captura" loading="lazy">
-          <figcaption>El avance del grupo mientras responden.</figcaption>
-        </figure>
-      #}
+               alt="El avance del grupo mientras responden." class="captura" loading="lazy"
+               role="button" tabindex="0" title="Clic para ampliar">
+          <span class="captura-lupa">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21M8 10.5h5M10.5 8v5"/>
+            </svg>
+          </span>
+        </div>
+        <figcaption>El avance del grupo mientras responden.</figcaption>
+      </figure>
     </div>
   </div>
 
@@ -169,15 +193,10 @@
     <div class="paso-num">4</div>
     <div>
       <h2 class="h5">Cierra la sesión</h2>
-      <p class="mb-2">
-        Cerrar hace tres cosas a la vez: el enlace deja de aceptar ingresos, se
-        calculan las notas de todos, y se genera el análisis de fortalezas y
-        debilidades con IA, tanto del grupo como de cada persona.
-      </p>
+      
       <p class="mb-0">
-        Los resultados quedan congelados. Si después editas la evaluación —
-        cambias una pregunta, corriges una alternativa — los informes ya
-        emitidos siguen mostrando lo que efectivamente se rindió.
+        Al cerrar la sesión, no se permiten más ingresos de participantes, se calculan las notas y se genera el análisis con IA del grupo y de cada persona. 
+        Snapshot: si después editas la evaluación, los informes ya emitidos no cambian.
       </p>
     </div>
   </div>
@@ -189,53 +208,89 @@
       <p class="mb-2">
         En <strong>Informes</strong> hay dos miradas. El
         <strong>informe de la sesión</strong> te muestra al grupo completo: la
-        matriz de quién acertó qué, las métricas y el análisis grupal. Sirve
-        para detectar la pregunta que casi nadie respondió bien, que
-        normalmente dice más del contenido que de las personas.
+        matriz de quién acertó qué, las métricas y el análisis grupal.
       </p>
       <p class="mb-2">
         El <strong>informe individual</strong> es de una persona en una
         rendición: su nota, su análisis y el detalle pregunta por pregunta.
       </p>
       <p class="mb-0">
-        Y desde ahí llegas al <strong>historial</strong>, que reúne todas las
-        rendiciones de esa persona a lo largo del tiempo, incluso de
-        evaluaciones distintas. Ahí está el valor que una planilla no te da:
-        ver si alguien mejoró. Cada barra se lee contra su propio umbral,
-        porque cada sesión fijó el suyo.
+        El <strong>historial</strong>, reúne todas las
+        rendiciones del participante. Cada barra se lee con su propio umbral.
       </p>
+
+      <figure class="mt-3">
+        <div class="captura-marco">
+          <img src="{{ url_for('static', filename='img/ayuda/historial-barras.png') }}"
+               alt="El resumen de rendiciones de una persona, con una barra por cada una." class="captura" loading="lazy"
+               role="button" tabindex="0" title="Clic para ampliar">
+          <span class="captura-lupa">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21M8 10.5h5M10.5 8v5"/>
+            </svg>
+          </span>
+        </div>
+        <figcaption>El resumen de rendiciones de una persona, con una barra por cada una.</figcaption>
+      </figure>
     </div>
   </div>
 </div>
 
-<h2 class="h5">Dos cosas que conviene saber</h2>
-<div class="row g-3 mb-4">
-  <div class="col-12 col-md-6">
-    <div class="card card-body h-100">
-      <h3 class="h6">Nadie ve el RUT de nadie</h3>
-      <p class="small mb-0">
-        El RUT de los participantes no se guarda: se guarda una huella
-        irreversible calculada a partir de él. Sirve para reconocer a la misma
-        persona entre sesiones y armar su historial, pero no se puede volver
-        atrás para recuperar el número. Ni tú ni nadie con acceso a la base de
-        datos lo ve.
-      </p>
-    </div>
-  </div>
-  <div class="col-12 col-md-6">
-    <div class="card card-body h-100">
-      <h3 class="h6">Todo informe se puede llevar afuera</h3>
-      <p class="small mb-0">
-        Cada informe tiene botón de imprimir, que en el diálogo del navegador
-        permite "Guardar como PDF". Las tablas se exportan además a CSV, que se
-        abre en Excel. Nada queda encerrado en la aplicación.
-      </p>
+
+
+{# Ampliar la captura. Un modal de Bootstrap alcanza: no hace falta una
+   libreria de galeria para mostrar una imagen a tamano completo. #}
+<div class="modal fade" id="modalCaptura" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-fullscreen-md-down modal-dialog-centered modal-captura">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title fs-6" id="tituloCaptura"></h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body text-center">
+        <img id="imagenCaptura" src="" alt="" class="img-fluid rounded">
+      </div>
     </div>
   </div>
 </div>
 
-<p class="text-muted small no-print">
-  ¿Algo no calza con lo que ves en pantalla? Escríbenos y lo corregimos: esta
-  página debe reflejar cómo funciona hoy, no cómo funcionaba antes.
-</p>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Ampliar capturas. Se delega en el documento porque los <img> viven dentro
+  // de bloques que se activan descomentando: si manana se agrega una captura
+  // mas, funciona sola, sin tocar este script.
+  (function () {
+    var el = document.getElementById("modalCaptura");
+    if (!el) return;
+
+    var modal = new bootstrap.Modal(el);
+    var img = document.getElementById("imagenCaptura");
+    var titulo = document.getElementById("tituloCaptura");
+
+    function ampliar(origen) {
+      img.src = origen.src;
+      img.alt = origen.alt;
+      titulo.textContent = origen.alt;
+      modal.show();
+    }
+
+    document.addEventListener("click", function (e) {
+      var captura = e.target.closest(".captura");
+      if (captura) ampliar(captura);
+    });
+
+    // Mismo comportamiento con teclado: las capturas son focusables.
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      var activo = document.activeElement;
+      if (activo && activo.classList.contains("captura")) {
+        e.preventDefault();
+        ampliar(activo);
+      }
+    });
+  })();
+</script>
 {% endblock %}
