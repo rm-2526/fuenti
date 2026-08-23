@@ -4,12 +4,21 @@ Solo accesible por facilitadores con es_admin=True. El primer administrador se
 crea/promueve con scripts/seed_facilitador.py --admin (no por este panel, ya que
 requeriría un admin previo).
 
-Sobre la contraseña inicial. Es OPCIONAL al crear. Si se deja en blanco, la
-cuenta nace con una clave aleatoria que nadie conoce y el panel entrega un
-enlace de activación para que el titular fije la suya: así el administrador
-no queda en posesión de las credenciales ajenas. Se mantiene la posibilidad de
-escribirla porque hay escenarios sin canal para hacer llegar el enlace, y
-porque los flujos ya existentes la envían.
+Invariante de credenciales. El panel NO permite fijar ni cambiar contraseñas de
+nadie. Al crear una cuenta se le asigna una clave aleatoria que nadie conoce, y
+el titular establece la suya a través de un enlace de activación firmado
+(app/utils/activacion.py). Mientras esto fue opcional era una buena práctica que
+dependía de que el administrador la eligiera cada vez; al retirar el campo pasa
+a ser una propiedad del sistema.
+
+Lo que esto garantiza, y lo que no. No impide que un administrador se apodere de
+una cuenta ajena: puede emitir un enlace y usarlo. Lo que impide es que lo haga
+sin dejar rastro, porque al establecer una clave nueva la anterior deja de
+funcionar y el titular lo advierte en su siguiente ingreso. La toma de control
+deja de ser silenciosa.
+
+Excepción documentada: scripts/seed_facilitador.py sí fija contraseñas, porque
+es el arranque del sistema y exige acceso al servidor o a la base.
 """
 import secrets
 from functools import wraps
@@ -41,8 +50,8 @@ def admin_required(view):
 def _enlace_activacion(f):
     """URL absoluta para que f establezca su contraseña.
 
-    Absoluta (_external=True) porque el enlace viaja fuera de la aplicación:
-    se copia y se envía por correo, mensajería o se entrega en persona.
+    Absoluta (_external=True) porque el enlace viaja fuera de la aplicación: se
+    copia y se envía por correo, mensajería o se entrega en persona.
     """
     return url_for(
         "auth.activar",
@@ -51,16 +60,12 @@ def _enlace_activacion(f):
     )
 
 
-def _validar_nuevo_facilitador(email, nombre, password):
+def _validar_nuevo_facilitador(email, nombre):
     errores = []
     if not email or "@" not in email:
         errores.append("El correo no es válido.")
     if not nombre:
         errores.append("El nombre es obligatorio.")
-    # Contraseña opcional: en blanco = se emite enlace de activación. Si viene
-    # con texto, debe cumplir el mínimo.
-    if password and len(password) < 8:
-        errores.append("La contraseña debe tener al menos 8 caracteres.")
     return errores
 
 
@@ -70,10 +75,11 @@ def facilitadores():
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
         nombre = request.form.get("nombre", "").strip()
-        password = request.form.get("password", "")
         es_admin = request.form.get("es_admin") == "on"
+        # La contraseña no se lee del formulario a propósito: aunque alguien la
+        # envíe a mano, se ignora.
 
-        errores = _validar_nuevo_facilitador(email, nombre, password)
+        errores = _validar_nuevo_facilitador(email, nombre)
 
         # Chequeo de duplicado antes de intentar insertar (mensaje claro).
         if not errores:
@@ -88,24 +94,18 @@ def facilitadores():
                 flash(e, "danger")
         else:
             nuevo = Facilitador(email=email, nombre=nombre, es_admin=es_admin)
-            if password:
-                nuevo.set_password(password)
-            else:
-                # Clave aleatoria que nadie conoce ni necesita conocer: la
-                # cuenta solo se abre por el enlace de activación.
-                nuevo.set_password(secrets.token_urlsafe(32))
+            # Clave aleatoria que nadie conoce ni necesita conocer: la cuenta
+            # solo se abre por el enlace de activación. No se guarda en ningún
+            # lado ni se muestra.
+            nuevo.set_password(secrets.token_urlsafe(32))
             db.session.add(nuevo)
             try:
                 db.session.commit()
-                if password:
-                    flash(f"Facilitador \"{email}\" creado.", "success")
-                else:
-                    flash(
-                        f"Facilitador \"{email}\" creado. Envíale este enlace "
-                        f"para que establezca su contraseña: "
-                        f"{_enlace_activacion(nuevo)}",
-                        "success",
-                    )
+                flash(
+                    f"Facilitador \"{email}\" creado. Envíale este enlace para "
+                    f"que establezca su contraseña: {_enlace_activacion(nuevo)}",
+                    "success",
+                )
             except IntegrityError:
                 # Carrera improbable: alguien insertó el mismo correo en paralelo.
                 db.session.rollback()
@@ -141,16 +141,18 @@ def _es_ultimo_admin_activo(f):
 @bp.route("/facilitadores/<int:fid>/enlace", methods=["POST"])
 @admin_required
 def enlace_activacion(fid):
-    """Regenera el enlace de activación de una cuenta existente.
+    """Emite un enlace de activación para una cuenta existente.
 
-    Es la vía para una contraseña olvidada. NO cambia la clave vigente: si el
-    titular nunca usa el enlace, la que tenía sigue funcionando. El cambio
-    tampoco es silencioso, porque al usarse invalida la contraseña anterior.
+    Es la única vía frente a una contraseña olvidada. NO cambia la clave
+    vigente: si el titular nunca usa el enlace, la que tenía sigue sirviendo.
     """
     f = _get_facilitador(fid)
 
     if not f.activo:
-        flash("La cuenta está desactivada. Reactívala antes de enviar el enlace.", "danger")
+        flash(
+            "La cuenta está desactivada. Reactívala antes de emitir el enlace.",
+            "danger",
+        )
     else:
         flash(
             f"Enlace de activación para \"{f.email}\": {_enlace_activacion(f)}",
@@ -168,17 +170,14 @@ def editar_facilitador(fid):
         nombre = request.form.get("nombre", "").strip()
         email = request.form.get("email", "").strip().lower()
         es_admin = request.form.get("es_admin") == "on"
-        password = request.form.get("password", "")
+        # Tampoco aquí se lee la contraseña: el cambio de clave pasa siempre por
+        # el enlace de activación.
 
         errores = []
         if not email or "@" not in email:
             errores.append("El correo no es válido.")
         if not nombre:
             errores.append("El nombre es obligatorio.")
-        # La contraseña es opcional al editar: en blanco = no se cambia. Si viene
-        # con texto, debe cumplir el mínimo.
-        if password and len(password) < 8:
-            errores.append("La contraseña debe tener al menos 8 caracteres.")
 
         # Correo único: puede ser el mismo de f, pero no el de OTRO facilitador.
         if not errores:
@@ -204,8 +203,6 @@ def editar_facilitador(fid):
             f.nombre = nombre
             f.email = email
             f.es_admin = es_admin
-            if password:  # solo si se escribió una nueva
-                f.set_password(password)
             db.session.commit()
             flash("Facilitador actualizado.", "success")
             return redirect(url_for("admin.facilitadores"))

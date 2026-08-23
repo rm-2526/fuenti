@@ -1,9 +1,17 @@
 """Tests del panel de administración (gestión de facilitadores).
 
-Cubre las guardas de acceso (anónimo -> login, no-admin -> 403, admin -> 200) y
-la creación de facilitadores (alta válida, rol admin, correo duplicado,
-contraseña corta), incluyendo que el nuevo facilitador pueda iniciar sesión.
+Cubre las guardas de acceso (anónimo -> login, no-admin -> 403, admin -> 200),
+la creación de facilitadores (alta válida, rol admin, correo duplicado), la
+edición, la baja lógica y la emisión de enlaces de activación.
+
+Sobre las contraseñas. El panel ya no las fija ni las cambia: al crear una
+cuenta se asigna una clave aleatoria y el titular establece la suya con el
+enlace de activación. Los tests de este archivo verifican esa invariante desde
+el lado del panel, incluido que una contraseña enviada a mano se ignore. El
+recorrido del enlace en sí vive en tests/test_activacion.py.
 """
+
+import re
 
 from app import db
 from app.models import Evaluacion, Facilitador
@@ -30,6 +38,12 @@ def _admin(app):
     )
 
 
+def _extraer_enlace(texto):
+    """Saca la ruta /activar/<token> del mensaje flash. None si no aparece."""
+    m = re.search(r"/activar/[A-Za-z0-9_\-\.]+", texto)
+    return m.group(0) if m else None
+
+
 # ------------------------- Guardas de acceso -------------------------
 
 def test_admin_anonimo_redirige_a_login(client):
@@ -49,7 +63,7 @@ def test_admin_no_admin_post_tambien_403(client, facilitador):
     _login(client, "facilitador@fuenti.cl", "fuenti2026")
     resp = client.post(
         "/admin/facilitadores",
-        data={"nombre": "X", "email": "x@x.cl", "password": "12345678"},
+        data={"nombre": "X", "email": "x@x.cl"},
     )
     assert resp.status_code == 403
     with client.application.app_context():
@@ -71,17 +85,15 @@ def test_admin_ve_la_lista(client, app):
 
 # ------------------------- Creación -------------------------
 
-def test_admin_crea_facilitador_y_puede_loguear(client, app):
+def test_admin_crea_facilitador_y_entrega_enlace(client, app):
+    """Alta completa: se crea la cuenta y el panel devuelve el enlace con el
+    que el titular establece su clave y puede iniciar sesión."""
     _admin(app)
     _login(client, "admin@fuenti.cl", "adminpass8")
 
     resp = client.post(
         "/admin/facilitadores",
-        data={
-            "nombre": "Nuevo Facilitador",
-            "email": "nuevo@fuenti.cl",
-            "password": "clave1234",
-        },
+        data={"nombre": "Nuevo Facilitador", "email": "nuevo@fuenti.cl"},
         follow_redirects=True,
     )
     assert resp.status_code == 200
@@ -93,12 +105,39 @@ def test_admin_crea_facilitador_y_puede_loguear(client, app):
         assert f is not None
         assert f.nombre == "Nuevo Facilitador"
         assert f.es_admin is False
-        assert f.check_password("clave1234")
 
-    # El nuevo facilitador puede iniciar sesión.
+    enlace = _extraer_enlace(resp.get_data(as_text=True))
+    assert enlace is not None
+
     client.get("/logout")
-    r = _login(client, "nuevo@fuenti.cl", "clave1234")
-    assert r.status_code == 200
+    client.post(
+        enlace,
+        data={"password": "claveDeEl2026", "confirmacion": "claveDeEl2026"},
+        follow_redirects=True,
+    )
+    assert _login(client, "nuevo@fuenti.cl", "claveDeEl2026").status_code == 200
+
+
+def test_admin_no_puede_fijar_la_contrasena_al_crear(client, app):
+    """Aunque se envíe el campo a mano, se ignora: la clave la define el titular."""
+    _admin(app)
+    _login(client, "admin@fuenti.cl", "adminpass8")
+
+    client.post(
+        "/admin/facilitadores",
+        data={
+            "nombre": "Intento",
+            "email": "intento@fuenti.cl",
+            "password": "claveImpuesta1",
+        },
+        follow_redirects=True,
+    )
+    with app.app_context():
+        f = db.session.scalar(
+            db.select(Facilitador).where(Facilitador.email == "intento@fuenti.cl")
+        )
+        assert f is not None
+        assert not f.check_password("claveImpuesta1")
 
 
 def test_admin_crea_otro_admin_con_checkbox(client, app):
@@ -107,12 +146,7 @@ def test_admin_crea_otro_admin_con_checkbox(client, app):
 
     client.post(
         "/admin/facilitadores",
-        data={
-            "nombre": "Otra Admin",
-            "email": "otra@fuenti.cl",
-            "password": "clave1234",
-            "es_admin": "on",
-        },
+        data={"nombre": "Otra Admin", "email": "otra@fuenti.cl", "es_admin": "on"},
         follow_redirects=True,
     )
     with app.app_context():
@@ -129,11 +163,7 @@ def test_admin_correo_duplicado_no_crea(client, app):
 
     resp = client.post(
         "/admin/facilitadores",
-        data={
-            "nombre": "Repetido",
-            "email": "existe@fuenti.cl",
-            "password": "otraclave1",
-        },
+        data={"nombre": "Repetido", "email": "existe@fuenti.cl"},
         follow_redirects=True,
     )
     assert "Ya existe un facilitador con ese correo" in resp.get_data(as_text=True)
@@ -146,23 +176,74 @@ def test_admin_correo_duplicado_no_crea(client, app):
         assert n == 1  # sigue habiendo uno solo
 
 
-def test_admin_password_corta_no_crea(client, app):
+def test_admin_correo_invalido_no_crea(client, app):
     _admin(app)
     _login(client, "admin@fuenti.cl", "adminpass8")
 
     resp = client.post(
         "/admin/facilitadores",
-        data={"nombre": "Corta", "email": "corta@fuenti.cl", "password": "123"},
+        data={"nombre": "Sin Arroba", "email": "no-es-un-correo"},
         follow_redirects=True,
     )
-    assert "al menos 8 caracteres" in resp.get_data(as_text=True)
+    assert "correo no es válido" in resp.get_data(as_text=True)
     with app.app_context():
-        assert (
-            db.session.scalar(
-                db.select(Facilitador).where(Facilitador.email == "corta@fuenti.cl")
-            )
-            is None
-        )
+        n = db.session.scalar(db.select(db.func.count()).select_from(Facilitador))
+        assert n == 1  # solo el admin
+
+
+# ------------------------- Enlace de activación -------------------------
+
+def test_admin_emite_enlace_para_cuenta_existente(client, app):
+    """Vía de contraseña olvidada: el enlace funciona y la clave vieja muere."""
+    _admin(app)
+    fid = _crear_facilitador(app, "olvido@fuenti.cl", "Olvidadizo", "claveVieja1")
+    _login(client, "admin@fuenti.cl", "adminpass8")
+
+    resp = client.post(f"/admin/facilitadores/{fid}/enlace", follow_redirects=True)
+    enlace = _extraer_enlace(resp.get_data(as_text=True))
+    assert enlace is not None
+
+    client.get("/logout")
+    client.post(
+        enlace,
+        data={"password": "claveFresca2026", "confirmacion": "claveFresca2026"},
+        follow_redirects=True,
+    )
+    assert _login(client, "olvido@fuenti.cl", "claveFresca2026").status_code == 200
+    client.get("/logout")
+    r = _login(client, "olvido@fuenti.cl", "claveVieja1")
+    assert "Credenciales inválidas" in r.get_data(as_text=True)
+
+
+def test_emitir_enlace_no_cambia_la_contrasena_vigente(client, app):
+    """Emitir el enlace no invalida nada: si no se usa, la clave sigue igual."""
+    _admin(app)
+    fid = _crear_facilitador(app, "intacta@fuenti.cl", "Intacta", "claveVigente1")
+    _login(client, "admin@fuenti.cl", "adminpass8")
+
+    client.post(f"/admin/facilitadores/{fid}/enlace", follow_redirects=True)
+    client.get("/logout")
+    assert _login(client, "intacta@fuenti.cl", "claveVigente1").status_code == 200
+
+
+def test_no_se_emite_enlace_para_cuenta_desactivada(client, app):
+    _admin(app)
+    fid = _crear_facilitador(app, "off2@fuenti.cl", "Apagada", "clave1234")
+    with app.app_context():
+        db.session.get(Facilitador, fid).activo = False
+        db.session.commit()
+    _login(client, "admin@fuenti.cl", "adminpass8")
+
+    resp = client.post(f"/admin/facilitadores/{fid}/enlace", follow_redirects=True)
+    texto = resp.get_data(as_text=True)
+    assert "desactivada" in texto
+    assert _extraer_enlace(texto) is None
+
+
+def test_no_admin_no_puede_pedir_enlace(client, app, facilitador):
+    otro = _crear_facilitador(app, "ajeno@fuenti.cl", "Ajeno", "clave1234")
+    _login(client, "facilitador@fuenti.cl", "fuenti2026")  # no es admin
+    assert client.post(f"/admin/facilitadores/{otro}/enlace").status_code == 403
 
 
 # ------------------------- Edición -------------------------
@@ -183,6 +264,31 @@ def test_admin_edita_nombre_email_y_rol(client, app):
         assert f.nombre == "Nombre Nuevo"
         assert f.email == "nuevo@fuenti.cl"
         assert f.es_admin is True
+
+
+def test_editar_no_toca_la_contrasena(client, app):
+    """Ni siquiera enviando el campo a mano: la edición no administra claves."""
+    _admin(app)
+    fid = _crear_facilitador(app, "igual@fuenti.cl", "Nombre", "claveOriginal1")
+    _login(client, "admin@fuenti.cl", "adminpass8")
+
+    client.post(
+        f"/admin/facilitadores/{fid}/editar",
+        data={
+            "nombre": "Nombre Editado",
+            "email": "igual@fuenti.cl",
+            "password": "claveImpuesta9",
+        },
+        follow_redirects=True,
+    )
+    with app.app_context():
+        assert db.session.get(Facilitador, fid).nombre == "Nombre Editado"
+    client.get("/logout")
+    # La original sigue funcionando y la impuesta nunca existió.
+    assert _login(client, "igual@fuenti.cl", "claveOriginal1").status_code == 200
+    client.get("/logout")
+    r = _login(client, "igual@fuenti.cl", "claveImpuesta9")
+    assert "Credenciales inválidas" in r.get_data(as_text=True)
 
 
 def test_admin_edita_no_puede_tomar_correo_de_otro(client, app):
@@ -292,62 +398,3 @@ def test_no_admin_no_puede_editar_ni_cambiar_estado(client, app, facilitador):
     _login(client, "facilitador@fuenti.cl", "fuenti2026")  # no es admin
     assert client.get(f"/admin/facilitadores/{otro}/editar").status_code == 403
     assert client.post(f"/admin/facilitadores/{otro}/estado").status_code == 403
-
-
-# ------------------------- Cambio de contraseña (opcional) -------------------------
-
-def test_editar_con_password_nueva_actualiza(client, app):
-    _admin(app)
-    fid = _crear_facilitador(app, "cambia@fuenti.cl", "Cambia", "claveVieja1")
-    _login(client, "admin@fuenti.cl", "adminpass8")
-
-    client.post(
-        f"/admin/facilitadores/{fid}/editar",
-        data={
-            "nombre": "Cambia",
-            "email": "cambia@fuenti.cl",
-            "password": "claveNueva9",
-        },
-        follow_redirects=True,
-    )
-    client.get("/logout")
-    # La nueva funciona…
-    assert _login(client, "cambia@fuenti.cl", "claveNueva9").status_code == 200
-    client.get("/logout")
-    # …y la vieja ya no.
-    r = _login(client, "cambia@fuenti.cl", "claveVieja1")
-    assert "Credenciales inválidas" in r.get_data(as_text=True)
-
-
-def test_editar_sin_password_conserva_la_actual(client, app):
-    _admin(app)
-    fid = _crear_facilitador(app, "igual@fuenti.cl", "Nombre", "claveOriginal1")
-    _login(client, "admin@fuenti.cl", "adminpass8")
-
-    # Se edita el nombre, con el campo de contraseña en blanco.
-    client.post(
-        f"/admin/facilitadores/{fid}/editar",
-        data={"nombre": "Nombre Editado", "email": "igual@fuenti.cl", "password": ""},
-        follow_redirects=True,
-    )
-    with app.app_context():
-        assert db.session.get(Facilitador, fid).nombre == "Nombre Editado"
-    client.get("/logout")
-    # La contraseña original sigue funcionando.
-    assert _login(client, "igual@fuenti.cl", "claveOriginal1").status_code == 200
-
-
-def test_editar_password_corta_no_cambia(client, app):
-    _admin(app)
-    fid = _crear_facilitador(app, "corta2@fuenti.cl", "Corta", "claveBuena1")
-    _login(client, "admin@fuenti.cl", "adminpass8")
-
-    resp = client.post(
-        f"/admin/facilitadores/{fid}/editar",
-        data={"nombre": "Corta", "email": "corta2@fuenti.cl", "password": "123"},
-        follow_redirects=True,
-    )
-    assert "al menos 8 caracteres" in resp.get_data(as_text=True)
-    client.get("/logout")
-    # No se cambió: la original sigue sirviendo.
-    assert _login(client, "corta2@fuenti.cl", "claveBuena1").status_code == 200
