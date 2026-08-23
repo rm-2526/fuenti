@@ -47,8 +47,10 @@ def test_la_ayuda_esta_enlazada_desde_el_menu(client, facilitador):
 
     assert 'href="/ayuda"' in html
     assert "Cómo funciona" in html
-    # Y tambien como tarjeta del panel: el menu se descubre poco.
-    assert "Ver la guía" in html
+    # Y tambien como tarjeta del panel: el menu se descubre poco. La tarjeta ya
+    # no tiene boton propio (toda ella es el enlace), asi que se verifica por su
+    # descripcion, que es lo que quedo como texto visible.
+    assert "El recorrido completo" in html
 
 
 def test_el_modal_de_bienvenida_solo_esta_en_el_panel(client, facilitador):

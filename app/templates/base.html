@@ -51,6 +51,15 @@
       --fuenti-tinta: #14161c;
       --fuenti-linea: #e8eaef;
       --fuenti-navbar: #fff;
+
+      /* Fondo de pagina apenas calido en vez del blanco de Bootstrap. El
+         objetivo no es decorar: es que las tarjetas, que siguen siendo
+         blancas, se despeguen del papel y el panel deje de verse plano.
+         Tenir tambien las tarjetas anularia el efecto.
+         Se redefine --bs-tertiary-bg porque el <body> ya usa
+         .bg-body-tertiary; asi el cambio es una sola variable y arrastra
+         tambien los recuadros de los informes, que usan la misma clase. */
+      --bs-tertiary-bg: #f5f3ef;
     }
     [data-bs-theme="dark"] {
       --fuenti-tinta: #e6e8ee;
@@ -97,6 +106,56 @@
     .btn-tema svg { display: block; }
     [data-bs-theme="light"] .icono-sol { display: none; }
     [data-bs-theme="dark"] .icono-luna { display: none; }
+
+    /* Tarjetas-accion del panel. La tarjeta entera es clickeable (el <a> lleva
+       .stretched-link), asi que necesita decir que lo es: el color aparece solo
+       al apuntarla. En reposo son neutras y no compiten con la jerarquia que
+       marcan el icono y el titulo. */
+    .tarjeta-accion {
+      border-color: var(--fuenti-linea);
+      transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+    }
+    .tarjeta-accion:hover {
+      border-color: var(--bs-primary);
+      transform: translateY(-2px);
+    }
+    [data-bs-theme="light"] .tarjeta-accion:hover {
+      box-shadow: 0 4px 12px rgba(20, 22, 28, .09);
+    }
+    [data-bs-theme="dark"] .tarjeta-accion:hover {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, .35);
+    }
+
+    /* El enlace es invisible por diseño, asi que el foco de teclado hay que
+       dibujarlo en la tarjeta o se pierde para quien no usa mouse. */
+    .tarjeta-accion:focus-within {
+      border-color: var(--bs-primary);
+      outline: 3px solid rgba(13, 110, 253, .35);
+      outline-offset: 2px;
+    }
+    .tarjeta-accion .stretched-link:focus-visible { outline: none; }
+
+    /* Quien prefiere menos movimiento conserva el cambio de borde y sombra,
+       que es lo que informa; se va solo el desplazamiento. */
+    @media (prefers-reduced-motion: reduce) {
+      .tarjeta-accion { transition: box-shadow .15s ease, border-color .15s ease; }
+      .tarjeta-accion:hover { transform: none; }
+    }
+
+    /* En oscuro, btn-outline-primary queda con poco contraste sobre el fondo.
+       Se sube al azul claro que Bootstrap ya usa para enlaces en este tema. */
+    [data-bs-theme="dark"] .btn-outline-primary {
+      --bs-btn-color: #6ea8fe;
+      --bs-btn-border-color: #6ea8fe;
+    }
+
+    /* Al imprimir, el papel es blanco. Los navegadores por defecto no imprimen
+       fondos, pero como las barras del historial piden print-color-adjust
+       exact, se declara explicito para que el tinte del fondo no viaje a la
+       hoja. */
+    @media print {
+      body { background-color: #fff !important; }
+    }
   </style>
 </head>
 <body class="bg-body-tertiary">

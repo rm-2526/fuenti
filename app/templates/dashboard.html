@@ -1,54 +1,73 @@
 {% extends "base.html" %}
+{% from "_iconos.html" import icono %}
 {% block title %}Panel - Fuenti{% endblock %}
 {% block content %}
 <h1 class="h3 mb-1">Hola, {{ nombre }}</h1>
 <p class="text-muted mb-4">¿Qué quieres hacer?</p>
 
+{#
+  Tarjetas-accion. Cada tarjeta ES el enlace: el <a> lleva .stretched-link, que
+  extiende su area clickeable a toda la tarjeta. Se eliminaron los botones
+  porque repetian el titulo ("Iniciar evaluacion" arriba y "Iniciar una
+  evaluacion" abajo) y porque en telefono el area de toque util pasa a ser la
+  tarjeta completa y no un boton de 40px.
+
+  El color aparece solo en hover: el borde toma el azul de marca y la tarjeta se
+  levanta. Asi el color señala "esto se puede tocar" en vez de competir con la
+  jerarquia entre acciones y ayuda, que se mantiene con el tono del icono y del
+  titulo.
+#}
 <div class="row g-3">
-  <!-- Iniciar evaluación (activa) -->
+  <!-- Iniciar evaluación -->
   <div class="col-12 col-md-4">
-    <div class="card h-100 border-primary">
-      <div class="card-body d-flex flex-column">
-        <h2 class="h5">Iniciar evaluación</h2>
-        <p class="small flex-grow-1">
-          Elige una evaluación y ábrela para recibir participantes.
+    <div class="card tarjeta-accion h-100">
+      <div class="card-body">
+        <span class="text-primary d-inline-flex mb-2">{{ icono("iniciar", 24) }}</span>
+        <h2 class="h5 mb-1">
+          <a href="{{ url_for('evaluaciones.iniciar') }}"
+             class="stretched-link text-body text-decoration-none">
+            Iniciar evaluación
+          </a>
+        </h2>
+        <p class="small text-body-secondary mb-0">
+          Abre una sesión y recibe participantes en la sala.
         </p>
-        <a href="{{ url_for('evaluaciones.iniciar') }}"
-           class="btn btn-primary align-self-start">
-          Iniciar una evaluación
-        </a>
       </div>
     </div>
   </div>
 
-  <!-- Biblioteca (activa) -->
+  <!-- Biblioteca -->
   <div class="col-12 col-md-4">
-    <div class="card h-100 border-primary">
-      <div class="card-body d-flex flex-column">
-        <h2 class="h5">Biblioteca</h2>
-        <p class="small flex-grow-1">
-          Crea, edita o elimina tus evaluaciones.
+    <div class="card tarjeta-accion h-100">
+      <div class="card-body">
+        <span class="text-primary d-inline-flex mb-2">{{ icono("biblioteca", 24) }}</span>
+        <h2 class="h5 mb-1">
+          <a href="{{ url_for('evaluaciones.listado') }}"
+             class="stretched-link text-body text-decoration-none">
+            Biblioteca
+          </a>
+        </h2>
+        <p class="small text-body-secondary mb-0">
+          Crea, edita y organiza tus evaluaciones.
         </p>
-        <a href="{{ url_for('evaluaciones.listado') }}"
-           class="btn btn-primary align-self-start">
-          Ir a la biblioteca
-        </a>
       </div>
     </div>
   </div>
 
-  <!-- Informes (activa) -->
+  <!-- Informes -->
   <div class="col-12 col-md-4">
-    <div class="card h-100 border-primary">
-      <div class="card-body d-flex flex-column">
-        <h2 class="h5">Informes</h2>
-        <p class="small flex-grow-1">
-          Revisa los resultados por sesión y los informes individuales.
+    <div class="card tarjeta-accion h-100">
+      <div class="card-body">
+        <span class="text-primary d-inline-flex mb-2">{{ icono("informes", 24) }}</span>
+        <h2 class="h5 mb-1">
+          <a href="{{ url_for('evaluaciones.informes') }}"
+             class="stretched-link text-body text-decoration-none">
+            Informes
+          </a>
+        </h2>
+        <p class="small text-body-secondary mb-0">
+          Resultados por sesión e informes individuales.
         </p>
-        <a href="{{ url_for('evaluaciones.informes') }}"
-           class="btn btn-primary align-self-start">
-          Ver informes
-        </a>
       </div>
     </div>
   </div>
@@ -59,38 +78,40 @@
   {% if current_user.es_admin %}
   <!-- Facilitadores (solo admin) -->
   <div class="col-12 col-md-4">
-    <div class="card h-100 border-primary">
-      <div class="card-body d-flex flex-column">
-        <h2 class="h5">Facilitadores</h2>
-        <p class="small flex-grow-1">
-          Administra las cuentas: crear, editar y activar o desactivar facilitadores.
+    <div class="card tarjeta-accion h-100">
+      <div class="card-body">
+        <span class="text-primary d-inline-flex mb-2">{{ icono("facilitadores", 24) }}</span>
+        <h2 class="h5 mb-1">
+          <a href="{{ url_for('admin.facilitadores') }}"
+             class="stretched-link text-body text-decoration-none">
+            Facilitadores
+          </a>
+        </h2>
+        <p class="small text-body-secondary mb-0">
+          Crea cuentas y activa o desactiva accesos.
         </p>
-        <a href="{{ url_for('admin.facilitadores') }}"
-           class="btn btn-primary align-self-start">
-          Gestionar facilitadores
-        </a>
       </div>
     </div>
   </div>
   {% endif %}
 
-  {# Ayuda: ultima y en tono secundario a proposito. Va sin borde azul ni boton
-     solido para no competir con las acciones de arriba, que son a lo que se
-     entra a hacer. Visible siempre (no solo la primera vez, como el modal):
-     quien la necesita suele necesitarla en la tercera sesion, no en la
-     primera. #}
+  {# Ayuda: ultima y en tono secundario a proposito. Sin el boton contorneado
+     que la distinguia, la jerarquia la sostienen el icono y el titulo en gris.
+     Visible siempre (no solo la primera vez, como el modal): quien la necesita
+     suele necesitarla en la tercera sesion, no en la primera. #}
   <div class="col-12 col-md-4">
-    <div class="card h-100">
-      <div class="card-body d-flex flex-column">
-        <h2 class="h5">Cómo funciona</h2>
-        <p class="small flex-grow-1">
-          El recorrido completo en cinco pasos, de crear una evaluación a leer
-          los informes.
+    <div class="card tarjeta-accion h-100">
+      <div class="card-body">
+        <span class="text-body-secondary d-inline-flex mb-2">{{ icono("ayuda", 24) }}</span>
+        <h2 class="h5 mb-1">
+          <a href="{{ url_for('ayuda') }}"
+             class="stretched-link text-body-secondary text-decoration-none">
+            Cómo funciona
+          </a>
+        </h2>
+        <p class="small text-body-secondary mb-0">
+          El recorrido completo, de crear una evaluación a leer los informes.
         </p>
-        <a href="{{ url_for('ayuda') }}"
-           class="btn btn-outline-primary align-self-start">
-          Ver la guía
-        </a>
       </div>
     </div>
   </div>
