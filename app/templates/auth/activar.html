@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "auth/_ojo.html" import ojo %}
 {% block title %}Establecer contraseña - Fuenti{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
@@ -12,14 +13,23 @@
         <form method="post" action="{{ url_for('auth.activar', token=token) }}">
           <div class="mb-3">
             <label for="password" class="form-label">Nueva contraseña</label>
-            <input type="password" class="form-control" id="password" name="password"
-                   minlength="8" required autofocus>
+            <div class="input-group">
+              <input type="password" class="form-control" id="password" name="password"
+                     minlength="8" autocomplete="new-password" required autofocus>
+              {{ ojo("password") }}
+            </div>
             <div class="form-text">Mínimo 8 caracteres.</div>
           </div>
           <div class="mb-3">
             <label for="confirmacion" class="form-label">Repite la contraseña</label>
-            <input type="password" class="form-control" id="confirmacion" name="confirmacion"
-                   minlength="8" required>
+            <div class="input-group">
+              <input type="password" class="form-control" id="confirmacion" name="confirmacion"
+                     minlength="8" autocomplete="new-password" required
+                     data-password-igual="password"
+                     data-password-aviso="avisoCoincidencia">
+              {{ ojo("confirmacion") }}
+            </div>
+            <div class="form-text text-danger" id="avisoCoincidencia" role="status" aria-live="polite"></div>
           </div>
           <button type="submit" class="btn btn-primary w-100">Guardar y continuar</button>
         </form>
@@ -31,4 +41,8 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/password.js') }}"></script>
 {% endblock %}
