@@ -463,6 +463,10 @@ def informe_individual(eval_id, sesion_id, participante_id):
     # el informe de una sesion ya rendida.
     desglose = desglose_desde_respuestas(participante.respuestas)
 
+    # El análisis narrativo de esta persona se genera aquí la primera vez, no
+    # al cerrar la sesión. Ver _analisis_persona_perezoso para el porqué.
+    _analisis_persona_perezoso(sesion, participante, desglose)
+
     return render_template(
         "evaluaciones/informe_individual.html",
         evaluacion=evaluacion,
@@ -696,7 +700,7 @@ def cerrar_sesion(eval_id, sesion_id):
         sesion.estado = "cerrada"
         sesion.cerrada_at = ahora_utc()
         db.session.commit()
-        # Cerrar es el momento natural para congelar el análisis de IA: los
+        # Cerrar es el momento natural para congelar el análisis DEL GRUPO: los
         # resultados ya no cambian. Va DESPUÉS del commit y envuelto para que un
         # fallo de la IA nunca impida cerrar la sesión.
         _generar_analisis_ia(sesion)
@@ -708,12 +712,25 @@ def cerrar_sesion(eval_id, sesion_id):
 
 
 def _generar_analisis_ia(sesion: Sesion) -> None:
-    """Wrapper del CIERRE de sesión: lee la config, genera y persiste.
+    """Wrapper del CIERRE de sesión: genera SOLO el análisis del grupo.
+
+    Por qué solo el grupo. Hasta la prueba de cargabilidad, el cierre generaba
+    también el análisis de cada participante. Con treinta personas son treinta
+    y una llamadas encadenadas, espaciadas varios segundos entre sí para no
+    pasarse del límite por minuto del plan gratuito: más de dos minutos de
+    ejecución dentro de una sola petición HTTP. El servidor WSGI corta el
+    trabajador mucho antes y el facilitador recibe un error de servidor,
+    aunque la sesión sí haya quedado cerrada.
+
+    Ahora el cierre hace una única llamada, la del grupo, que es la que el
+    facilitador necesita de inmediato al terminar la actividad. El análisis
+    individual se genera al abrir cada informe (ver _analisis_persona_perezoso),
+    de modo que las llamadas se reparten en el tiempo en lugar de acumularse.
 
     Degrada en silencio: sin API key no hace nada; cualquier error se traga
     para que cerrar la sesión nunca falle por culpa de la IA. El backfill por
-    consola usa el mismo núcleo (generar_analisis_de_sesion) pero SÍ reporta lo
-    que hizo.
+    consola usa el mismo núcleo (generar_analisis_de_sesion) con
+    incluir_personas=True y SÍ reporta lo que hizo.
     """
     api_key = current_app.config.get("GEMINI_API_KEY")
     if not api_key:
@@ -721,10 +738,51 @@ def _generar_analisis_ia(sesion: Sesion) -> None:
     modelo = current_app.config.get("GEMINI_MODEL", gemini.MODELO_POR_DEFECTO)
     espaciado = current_app.config.get("GEMINI_ESPACIADO_SEG", 0.0)
     try:
-        generar_analisis_de_sesion(sesion, api_key, modelo, espaciado=espaciado)
+        generar_analisis_de_sesion(
+            sesion, api_key, modelo, espaciado=espaciado, incluir_personas=False
+        )
         db.session.commit()
     except Exception:
         # Nunca dejar la sesión a medio cerrar por un problema de la IA.
+        db.session.rollback()
+
+
+def _analisis_persona_perezoso(sesion, participante, desglose) -> None:
+    """Genera el análisis individual la PRIMERA vez que se abre su informe.
+
+    Es la contraparte de la decisión explicada en _generar_analisis_ia: una
+    llamada por informe abierto, en lugar de treinta encadenadas al cerrar.
+    El facilitador revisa los informes de a uno, así que el costo queda
+    repartido y ninguna petición acumula la espera de todas las demás.
+
+    Idempotente: solo genera si 'analisis_ia' está en NULL, de modo que abrir
+    el informe dos veces no vuelve a llamar al modelo ni pisa lo ya congelado.
+    Degrada en silencio: sin clave, o si el servicio falla, el informe se
+    muestra igual y simplemente no aparece el recuadro de análisis.
+    """
+    resultado = participante.resultado
+    if resultado is None or resultado.analisis_ia:
+        return
+    api_key = current_app.config.get("GEMINI_API_KEY")
+    if not api_key:
+        return
+    modelo = current_app.config.get("GEMINI_MODEL", gemini.MODELO_POR_DEFECTO)
+    try:
+        resumen_grupo = _resumen_de_sesion(sesion)
+        datos = resumen_persona(
+            desglose,
+            porcentaje=resultado.porcentaje,
+            umbral=resultado.umbral_aprobacion,
+            aprobado=resultado.aprobado,
+            promedio_logro_grupo=resumen_grupo.promedio_logro,
+        )
+        texto = gemini.generar_texto(prompt_persona(datos), api_key, modelo)
+        if texto:
+            resultado.analisis_ia = texto
+            resultado.analisis_generado_at = ahora_utc()
+            db.session.commit()
+    except Exception:
+        # El informe vale por sí mismo: un fallo de la IA no lo impide.
         db.session.rollback()
 
 
@@ -737,7 +795,8 @@ ResultadoAnalisis = namedtuple(
 
 
 def generar_analisis_de_sesion(
-    sesion, api_key, modelo, espaciado: float = 0.0, _sleep=time.sleep
+    sesion, api_key, modelo, espaciado: float = 0.0, _sleep=time.sleep,
+    incluir_personas: bool = True,
 ) -> "ResultadoAnalisis":
     """Núcleo de generación del análisis de IA (grupo + por persona).
 
@@ -752,6 +811,12 @@ def generar_analisis_de_sesion(
     primera ni después de la última, ni gasta pausas en participantes omitidos.
     El backoff de gemini.py sigue actuando como red de seguridad por si igual
     aparece un 429. '_sleep' se inyecta para poder testear sin esperar de verdad.
+
+    'incluir_personas' distingue a los dos llamadores. El backfill por consola
+    lo deja en True y genera todo lo que falte. El cierre de sesión lo pone en
+    False y genera solo el grupo, porque encadenar una llamada por participante
+    dentro de una petición HTTP excede el plazo del servidor cuando el grupo es
+    grande. El análisis individual se genera después, al abrir cada informe.
 
     PRIVACIDAD: a analisis.py solo se le pasan textos de preguntas, aciertos y
     números; el nombre y el hash del participante no salen nunca hacia el modelo.
@@ -777,8 +842,10 @@ def generar_analisis_de_sesion(
         elif espaciado:
             _sleep(espaciado)
 
-    # --- Por persona ---
-    for participante, desglose in zip(finalizados, desgloses):
+    # --- Por persona (omitido cuando llama el cierre de sesión) ---
+    for participante, desglose in zip(
+        finalizados if incluir_personas else [], desgloses
+    ):
         resultado = participante.resultado
         if resultado.analisis_ia:
             personas_omitidas += 1

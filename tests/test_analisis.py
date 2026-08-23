@@ -239,6 +239,42 @@ def Respuesta_foto(participante_id, orden, enunciado, elegida, correcta, acerto)
     )
 
 
+def _agregar_finalizados(app, sesion_id, cuantos):
+    """Suma participantes finalizados a una sesion ya creada.
+
+    Sirve para probar que el costo del cierre no crece con el tamano del grupo.
+    """
+    from app.models import Respuesta
+
+    with app.app_context():
+        for i in range(cuantos):
+            part = Participante(
+                sesion_id=sesion_id,
+                identificador_hash=f"hash_extra_{i}",
+                nombre=f"Persona {i}",
+            )
+            db.session.add(part)
+            db.session.flush()
+            db.session.add_all([
+                Respuesta(
+                    participante_id=part.id, enunciado_texto="¿EPP obligatorio?",
+                    elegida_texto="Casco", correcta_texto="Casco",
+                    acerto=True, orden=1,
+                ),
+                Respuesta(
+                    participante_id=part.id, enunciado_texto="¿Vía de evacuación?",
+                    elegida_texto="Ventana", correcta_texto="Salida norte",
+                    acerto=False, orden=2,
+                ),
+            ])
+            db.session.add(Resultado(
+                participante_id=part.id, puntaje=1, total_preguntas=2,
+                porcentaje=50.0, nota=4.0, aprobado=False,
+                evaluacion_titulo="Prevención de riesgos", umbral_aprobacion=60,
+            ))
+        db.session.commit()
+
+
 def test_cerrar_sin_api_key_cierra_y_no_persiste_analisis(app, client, facilitador):
     app.config["GEMINI_API_KEY"] = ""  # forzar degradación
     eval_id, sesion_id, part_id = _sesion_con_finalizado(app, facilitador.id)
@@ -258,29 +294,136 @@ def test_cerrar_sin_api_key_cierra_y_no_persiste_analisis(app, client, facilitad
         assert r.analisis_ia is None
 
 
-def test_cerrar_con_generador_persiste_persona_y_grupo(
+def test_cerrar_persiste_solo_el_analisis_del_grupo(
     app, client, facilitador, monkeypatch
 ):
+    """El cierre genera UNA llamada, la del grupo.
+
+    Antes generaba tambien la de cada participante. Con treinta personas eso
+    excedia el plazo del servidor (ver _generar_analisis_ia). El analisis
+    individual queda para cuando se abra su informe.
+    """
     app.config["GEMINI_API_KEY"] = "clave-de-prueba"
-    monkeypatch.setattr(
-        gemini, "generar_texto",
-        lambda prompt, api_key, modelo=None, timeout=30: "Análisis simulado.",
-    )
+    llamadas = []
+
+    def _falso(prompt, api_key, modelo=None, timeout=30):
+        llamadas.append(prompt)
+        return "Análisis simulado."
+
+    monkeypatch.setattr(gemini, "generar_texto", _falso)
     eval_id, sesion_id, part_id = _sesion_con_finalizado(app, facilitador.id)
     _login(client)
 
     client.post(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/cerrar")
 
+    assert len(llamadas) == 1  # solo el grupo, no una por persona
     with app.app_context():
         s = db.session.get(Sesion, sesion_id)
-        r = (
-            db.session.query(Resultado)
-            .filter_by(participante_id=part_id).one()
-        )
+        r = db.session.query(Resultado).filter_by(participante_id=part_id).one()
         assert s.analisis_ia == "Análisis simulado."
         assert s.analisis_generado_at is not None
-        assert r.analisis_ia == "Análisis simulado."
+        assert r.analisis_ia is None          # todavia no: se genera al abrir
+        assert r.analisis_generado_at is None
+
+
+def test_cerrar_con_muchos_participantes_no_encadena_llamadas(
+    app, client, facilitador, monkeypatch
+):
+    """Regresion de la falla encontrada en la prueba de cargabilidad.
+
+    Con el comportamiento anterior, una sesion de N finalizados producia N+1
+    llamadas espaciadas dentro de la misma peticion. Aqui se verifica que el
+    numero de llamadas del cierre no depende de cuanta gente rindio.
+    """
+    app.config["GEMINI_API_KEY"] = "clave-de-prueba"
+    app.config["GEMINI_ESPACIADO_SEG"] = 0.0
+    llamadas = []
+    monkeypatch.setattr(
+        gemini, "generar_texto",
+        lambda prompt, api_key, modelo=None, timeout=30: llamadas.append(prompt) or "ok",
+    )
+    eval_id, sesion_id, part_id = _sesion_con_finalizado(app, facilitador.id)
+    _agregar_finalizados(app, sesion_id, cuantos=9)
+    _login(client)
+
+    client.post(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/cerrar")
+
+    assert len(llamadas) == 1  # diez finalizados, una sola llamada
+
+
+def test_informe_individual_genera_el_analisis_la_primera_vez(
+    app, client, facilitador, monkeypatch
+):
+    app.config["GEMINI_API_KEY"] = "clave-de-prueba"
+    llamadas = []
+    monkeypatch.setattr(
+        gemini, "generar_texto",
+        lambda prompt, api_key, modelo=None, timeout=30: (
+            llamadas.append(prompt) or "Refuerza evacuación."
+        ),
+    )
+    eval_id, sesion_id, part_id = _sesion_con_finalizado(
+        app, facilitador.id, estado="cerrada"
+    )
+    _login(client)
+    url = (
+        f"/evaluaciones/{eval_id}/sesiones/{sesion_id}"
+        f"/participantes/{part_id}/informe"
+    )
+
+    resp = client.get(url)
+    assert "Refuerza evacuación." in resp.get_data(as_text=True)
+    assert len(llamadas) == 1
+
+    # Idempotente: la segunda visita no vuelve a llamar al modelo.
+    client.get(url)
+    assert len(llamadas) == 1
+    with app.app_context():
+        r = db.session.query(Resultado).filter_by(participante_id=part_id).one()
+        assert r.analisis_ia == "Refuerza evacuación."
         assert r.analisis_generado_at is not None
+
+
+def test_informe_individual_sin_api_key_se_muestra_igual(app, client, facilitador):
+    app.config["GEMINI_API_KEY"] = ""
+    eval_id, sesion_id, part_id = _sesion_con_finalizado(
+        app, facilitador.id, estado="cerrada"
+    )
+    _login(client)
+
+    resp = client.get(
+        f"/evaluaciones/{eval_id}/sesiones/{sesion_id}"
+        f"/participantes/{part_id}/informe"
+    )
+    assert resp.status_code == 200
+    assert "Persona Test" in resp.get_data(as_text=True)
+    with app.app_context():
+        r = db.session.query(Resultado).filter_by(participante_id=part_id).one()
+        assert r.analisis_ia is None
+
+
+def test_informe_individual_absorbe_la_falla_del_servicio(
+    app, client, facilitador, monkeypatch
+):
+    app.config["GEMINI_API_KEY"] = "clave-de-prueba"
+
+    def _revienta(prompt, api_key, modelo=None, timeout=30):
+        raise RuntimeError("servicio caído")
+
+    monkeypatch.setattr(gemini, "generar_texto", _revienta)
+    eval_id, sesion_id, part_id = _sesion_con_finalizado(
+        app, facilitador.id, estado="cerrada"
+    )
+    _login(client)
+
+    resp = client.get(
+        f"/evaluaciones/{eval_id}/sesiones/{sesion_id}"
+        f"/participantes/{part_id}/informe"
+    )
+    assert resp.status_code == 200  # el informe vale por si mismo
+    with app.app_context():
+        r = db.session.query(Resultado).filter_by(participante_id=part_id).one()
+        assert r.analisis_ia is None
 
 
 def test_no_regenera_analisis_ya_existente(app, client, facilitador, monkeypatch):
@@ -302,6 +445,11 @@ def test_no_regenera_analisis_ya_existente(app, client, facilitador, monkeypatch
     )
     _login(client)
     client.post(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/cerrar")
+    # Y tampoco lo pisa al abrir el informe individual.
+    client.get(
+        f"/evaluaciones/{eval_id}/sesiones/{sesion_id}"
+        f"/participantes/{part_id}/informe"
+    )
 
     with app.app_context():
         s = db.session.get(Sesion, sesion_id)
