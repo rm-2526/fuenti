@@ -40,6 +40,19 @@
               <td class="text-end">
                 <a href="{{ url_for('admin.editar_facilitador', fid=f.id) }}"
                    class="btn btn-sm btn-outline-secondary">Editar</a>
+                {% if f.activo %}
+                  <form method="POST"
+                        action="{{ url_for('admin.enlace_activacion', fid=f.id) }}"
+                        class="d-inline">
+                    <button type="submit"
+                            class="btn btn-sm btn-outline-primary js-confirmar"
+                            data-confirmar-titulo="Generar enlace de activación"
+                            data-confirmar-mensaje="Se generará un enlace para que «{{ f.nombre }}» establezca una contraseña nueva. Su contraseña actual seguirá funcionando hasta que use el enlace."
+                            data-confirmar-boton="Generar enlace">
+                      Enlace
+                    </button>
+                  </form>
+                {% endif %}
                 <form method="POST"
                       action="{{ url_for('admin.cambiar_estado', fid=f.id) }}"
                       class="d-inline">
@@ -81,10 +94,16 @@
                    maxlength="255" required>
           </div>
           <div class="mb-3">
-            <label for="password" class="form-label">Contraseña</label>
+            <label for="password" class="form-label">
+              Contraseña <span class="text-body-secondary fw-normal">(opcional)</span>
+            </label>
             <input type="password" class="form-control" id="password" name="password"
-                   minlength="8" required>
-            <div class="form-text">Mínimo 8 caracteres.</div>
+                   minlength="8" autocomplete="new-password">
+            <div class="form-text">
+              Déjala en blanco para entregar un enlace de activación: así la
+              persona define su propia contraseña y nadie más la conoce.
+              Si la escribes, mínimo 8 caracteres.
+            </div>
           </div>
           <div class="form-check mb-3">
             <input type="checkbox" class="form-check-input" id="es_admin" name="es_admin">
