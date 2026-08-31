@@ -16,7 +16,11 @@ La nota usa la escala chilena de 1,0 a 7,0: el umbral de la sesión equivale a u
 
 Cada respuesta persiste una copia congelada de su evidencia: el enunciado, el texto de las alternativas y el umbral vigentes al momento del envío. Por eso un informe ya emitido no cambia aunque la evaluación se edite después.
 
-Cuando el facilitador cierra una sesión, el servidor deja de aceptar ingresos y respuestas, con independencia del estado del cliente. El cierre es irreversible. Cada facilitador solo ve y gestiona sus propias evaluaciones y sesiones. El rol de administrador gestiona las cuentas de facilitador (alta, edición, activación y desactivación).
+Cuando el facilitador cierra una sesión, el servidor deja de aceptar ingresos y respuestas, con independencia del estado del cliente. El cierre es irreversible. Cada facilitador solo ve y gestiona sus propias evaluaciones y sesiones.
+
+No hay registro autónomo. Una cuenta de facilitador nace de dos maneras, y ambas terminan igual: el administrador la crea desde el panel, o alguien la solicita desde el formulario público y el administrador la aprueba. En los dos casos el sistema nunca fija una contraseña que alguien conozca: emite un enlace de activación firmado, de un solo uso y con siete días de vigencia, y el titular establece la suya. Una solicitud rechazada se elimina, de modo que esa dirección queda libre para volver a intentarlo; una cuenta ya aprobada solo se desactiva, y esa baja es reversible y conserva sus evaluaciones e informes.
+
+La aplicación incorpora una guía de uso propia, accesible sin credenciales, que recorre el funcionamiento en cinco pasos.
 
 Opcionalmente, el sistema genera un análisis narrativo del grupo y de cada participante mediante un modelo generativo externo, a partir de datos ya despersonalizados. Si el servicio no está disponible, la sesión se cierra y los informes se emiten igual: la funcionalidad degrada en silencio.
 
@@ -63,7 +67,7 @@ El script actualiza la contraseña si el correo ya existe. El servidor se levant
 pytest
 ```
 
-381 casos en 28 archivos, que se ejecutan sobre SQLite en memoria, así que no tocan ni la base local ni la de producción. Cubren tres niveles:
+393 casos en 30 archivos, que se ejecutan sobre SQLite en memoria, así que no tocan ni la base local ni la de producción. Cubren tres niveles:
 
 - **Unitario**: lógica pura sin contexto de aplicación (identidad, calificación, aleatorización, estadísticas, reportería).
 - **Integración con la base de datos**: restricciones del esquema ante inserciones que evaden el controlador, y correspondencia entre las vistas y el cálculo equivalente en Python.
@@ -71,7 +75,9 @@ pytest
 
 ## Modelo de datos
 
-Ocho entidades: `Facilitador`, `Evaluacion`, `Pregunta`, `Alternativa`, `Sesion`, `Participante`, `Respuesta` y `Resultado`. Nueve migraciones de Alembic, aditivas y reversibles.
+Ocho entidades: `Facilitador`, `Evaluacion`, `Pregunta`, `Alternativa`, `Sesion`, `Participante`, `Respuesta` y `Resultado`. Diez migraciones de Alembic, aditivas y reversibles.
+
+En `Facilitador`, `aprobado` y `activo` son campos separados a propósito: el primero dice si un administrador dio el visto bueno alguna vez, el segundo si la cuenta puede operar ahora. Una solicitud pendiente es `aprobado = false`; una cuenta dada de baja es `aprobado = true, activo = false`.
 
 Parte de la lógica vive en el esquema, no solo en el código: restricciones `UNIQUE` que impiden participaciones duplicadas por sesión, restricciones `CHECK` que acotan la nota a la escala 1,0–7,0, los estados válidos de una sesión y la coherencia temporal entre apertura y cierre, y un índice sobre el identificador seudonimizado que resuelve la consulta longitudinal sin recorrer la tabla completa.
 
@@ -91,8 +97,8 @@ app/
   models.py          Modelos SQLAlchemy (8 entidades)
   vistas.py          Definición y creación de las dos vistas
   cli.py             Comandos de mantención (flask analisis-backfill)
-  auth/              Login del facilitador
-  admin/             Gestión de cuentas de facilitador
+  auth/              Login, solicitud de acceso y activación de cuenta
+  admin/             Gestión de cuentas y resolución de solicitudes
   evaluaciones/      CRUD de evaluaciones, sesiones e informes
   participante/      Ingreso, cuestionario y resultado (público, sin login)
   utils/
@@ -103,18 +109,18 @@ app/
     estadisticas.py  Agregados de sesión
     reporte.py       Armado de informes
     analisis.py      Análisis narrativo
-    activacion.py    Activación de cuentas
+    activacion.py    Enlaces firmados de activación y restablecimiento
     gemini.py        Adaptador al modelo generativo externo
     qr.py            Generación local de códigos QR (segno)
   templates/         Plantillas Jinja2
   static/            JS propio (validación de RUT, sondeo del panel)
-migrations/          Alembic (9 revisiones)
+migrations/          Alembic (10 revisiones)
 scripts/
   seed_facilitador.py
   locustfile.py      Escenarios de prueba de carga
 docs/
   REQUERIMIENTOS.md
-tests/               28 archivos, 381 casos
+tests/               30 archivos, 393 casos
 conftest.py
 main.py
 Procfile
