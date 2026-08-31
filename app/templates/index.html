@@ -906,11 +906,10 @@
     <section class="envoltura cierre">
       <h2 class="seccion-titulo">¿Dudas?</h2>
       <p class="seccion-bajada">
-        Las cuentas de facilitador se crean por invitación. Escríbenos y
-        vemos si Fuenti le sirve a tu programa de capacitación.
+        Las cuentas de facilitador se crean por invitación. Déjanos tus datos,
+        cuéntanos para qué programa de capacitación lo necesitas y revisamos tu solicitud.
       </p>
-      {# CAMBIAR este correo por el real antes de subir. #}
-      <a class="boton boton-solido" href="mailto:contacto@fuenti.cl">Contáctanos</a>
+      <a class="boton boton-solido" href="{{ url_for('auth.solicitud') }}">Solicitar acceso</a>
     </section>
 
   </main>

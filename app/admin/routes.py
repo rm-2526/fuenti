@@ -93,7 +93,12 @@ def facilitadores():
             for e in errores:
                 flash(e, "danger")
         else:
-            nuevo = Facilitador(email=email, nombre=nombre, es_admin=es_admin)
+            # aprobado=True explicito: crear la cuenta desde el panel ES el acto
+            # de aprobacion. Se deja escrito y no se confia en el default del
+            # modelo, porque este es el punto donde la decision se toma.
+            nuevo = Facilitador(
+                email=email, nombre=nombre, es_admin=es_admin, aprobado=True
+            )
             # Clave aleatoria que nadie conoce ni necesita conocer: la cuenta
             # solo se abre por el enlace de activación. No se guarda en ningún
             # lado ni se muestra.
@@ -112,10 +117,22 @@ def facilitadores():
                 flash("Ya existe un facilitador con ese correo.", "danger")
             return redirect(url_for("admin.facilitadores"))
 
+    # Dos listados separados a proposito: una solicitud pendiente y una cuenta
+    # dada de baja no son lo mismo, y mezclarlas obligaria al administrador a
+    # distinguirlas por la fecha.
     lista = db.session.scalars(
-        db.select(Facilitador).order_by(Facilitador.created_at)
+        db.select(Facilitador)
+        .where(Facilitador.aprobado.is_(True))
+        .order_by(Facilitador.created_at)
     ).all()
-    return render_template("admin/facilitadores.html", facilitadores=lista)
+    pendientes = db.session.scalars(
+        db.select(Facilitador)
+        .where(Facilitador.aprobado.is_(False))
+        .order_by(Facilitador.created_at)
+    ).all()
+    return render_template(
+        "admin/facilitadores.html", facilitadores=lista, pendientes=pendientes
+    )
 
 
 def _get_facilitador(fid):
@@ -233,4 +250,67 @@ def cambiar_estado(fid):
         db.session.commit()
         flash(f"Facilitador \"{f.email}\" reactivado.", "success")
 
+    return redirect(url_for("admin.facilitadores"))
+
+
+@bp.route("/solicitudes/<int:fid>/aprobar", methods=["POST"])
+@admin_required
+def aprobar_solicitud(fid):
+    """Convierte una solicitud pendiente en cuenta.
+
+    No inventa una via nueva de alta: aprobar es marcar `aprobado` y emitir el
+    mismo enlace de activacion que emite la creacion desde el panel. El
+    solicitante establece su propia contrasena, igual que siempre.
+    """
+    f = _get_facilitador(fid)
+
+    if f.aprobado:
+        # Ya no es una solicitud. Se responde 403 y no 404 porque el registro
+        # existe: lo que no corresponde es la operacion.
+        abort(403)
+
+    f.aprobado = True
+    db.session.commit()
+    flash(
+        f"Solicitud de \"{f.email}\" aprobada. Envíale este enlace para que "
+        f"establezca su contraseña: {_enlace_activacion(f)}",
+        "success",
+    )
+    return redirect(url_for("admin.facilitadores"))
+
+
+@bp.route("/solicitudes/<int:fid>/rechazar", methods=["POST"])
+@admin_required
+def rechazar_solicitud(fid):
+    """Descarta una solicitud pendiente, borrando el registro.
+
+    Es la UNICA operacion del sistema que borra fisicamente un facilitador, y
+    por eso esta acotada por dos condiciones verificadas en el servidor.
+
+    La primera define el alcance: solo alcanza a quien nunca fue aprobado, o
+    sea a un registro que nunca llego a ser una cuenta.
+
+    La segunda es un cinturon de seguridad. Facilitador.evaluaciones tiene
+    cascade="all, delete-orphan", y esa cascada sigue hasta preguntas,
+    alternativas, sesiones, participantes, respuestas y resultados: borrar a un
+    facilitador con historia destruiria la evidencia de sus capacitaciones, que
+    es justo lo que el diseno evita con la desactivacion reversible. Hoy una
+    solicitud pendiente no puede tener evaluaciones (no puede iniciar sesion),
+    pero el borrado no debe depender de que ese supuesto siga siendo cierto.
+
+    Se borra en lugar de dejarlo como registro rechazado porque el correo es
+    unico: conservarlo dejaria la direccion tomada y esa persona no podria
+    volver a solicitar.
+    """
+    f = _get_facilitador(fid)
+
+    if f.aprobado:
+        abort(403)
+    if f.evaluaciones:
+        abort(403)
+
+    email = f.email
+    db.session.delete(f)
+    db.session.commit()
+    flash(f"Solicitud de \"{email}\" rechazada.", "info")
     return redirect(url_for("admin.facilitadores"))

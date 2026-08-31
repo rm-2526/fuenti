@@ -29,6 +29,21 @@ class Facilitador(UserMixin, db.Model):
     # existente se corta, pero se conserva TODO lo suyo (evaluaciones, sesiones,
     # informes). Es un "borrado suave" reversible: no destruye datos.
     activo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Aprobado: responde una pregunta DISTINTA de `activo`. `aprobado` dice si un
+    # administrador dio el visto bueno alguna vez; `activo` dice si la cuenta
+    # puede operar ahora. Son independientes a proposito:
+    #   aprobado=False              -> solicitud pendiente de revision
+    #   aprobado=True, activo=True  -> cuenta operativa
+    #   aprobado=True, activo=False -> cuenta dada de baja
+    # Sobrecargar `activo` para las dos cosas mezclaria en el mismo listado a
+    # quien nunca fue usuario con quien dejo de serlo, y el mensaje de login
+    # ("esta cuenta esta desactivada") le diria a un solicitante que tuvo una
+    # cuenta y se la quitaron.
+    aprobado: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Organizacion declarada al solicitar acceso. Es la unica informacion con
+    # que el administrador decide aprobar o rechazar, asi que se guarda tal como
+    # la escribio el solicitante. Nula en las cuentas creadas desde el panel.
+    organizacion: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=ahora_utc
     )

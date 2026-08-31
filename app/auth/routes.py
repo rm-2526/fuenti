@@ -1,4 +1,7 @@
+import secrets
+
 from flask import current_app, render_template, redirect, url_for, request, flash
+from sqlalchemy.exc import IntegrityError
 from flask_login import login_user, logout_user, login_required, current_user
 from urllib.parse import urlparse
 
@@ -25,6 +28,19 @@ def login():
             flash("Credenciales inválidas.", "danger")
             return redirect(url_for("auth.login"))
 
+        # Va ANTES de `activo` porque son estados distintos y el mensaje debe
+        # decir la verdad: a quien todavia no fue aprobado no se le puede decir
+        # que su cuenta esta desactivada, porque nunca la tuvo. En la practica
+        # esta rama casi no se alcanza (una solicitud pendiente tiene una clave
+        # aleatoria que nadie conoce, asi que antes falla check_password), pero
+        # el estado no debe depender de esa coincidencia.
+        if not facilitador.aprobado:
+            flash(
+                "Tu solicitud de acceso todavía está en revisión.",
+                "info",
+            )
+            return redirect(url_for("auth.login"))
+
         if not facilitador.activo:
             flash("Esta cuenta está desactivada. Contacta a un administrador.", "danger")
             return redirect(url_for("auth.login"))
@@ -38,6 +54,81 @@ def login():
         return redirect(next_page)
 
     return render_template("auth/login.html")
+
+
+@bp.route("/solicitud", methods=["GET", "POST"])
+def solicitud():
+    """Solicitud publica de una cuenta de facilitador.
+
+    No crea acceso: crea un registro pendiente que un administrador aprueba o
+    rechaza. La cuenta nace con `aprobado=False` y una clave aleatoria que nadie
+    conoce, de modo que aunque alguien adivinara la existencia del registro no
+    tendria como entrar. El acceso real solo aparece al aprobar, y por la misma
+    via de siempre: el enlace de activacion firmado.
+
+    La respuesta es la MISMA exista o no ya ese correo. Si dijera "ya hay una
+    solicitud con ese correo", el formulario se convertiria en un detector de
+    quien tiene cuenta en el sistema.
+    """
+    if current_user.is_authenticated:
+        return redirect(url_for("dashboard"))
+
+    if request.method == "POST":
+        nombre = request.form.get("nombre", "").strip()
+        email = request.form.get("email", "").strip().lower()
+        organizacion = request.form.get("organizacion", "").strip()
+
+        errores = []
+        if not nombre:
+            errores.append("El nombre es obligatorio.")
+        if not email or "@" not in email:
+            errores.append("El correo no es válido.")
+        if not organizacion:
+            errores.append("La organización es obligatoria.")
+
+        if errores:
+            for e in errores:
+                flash(e, "danger")
+            return render_template(
+                "auth/solicitud.html",
+                nombre=nombre,
+                email=email,
+                organizacion=organizacion,
+            )
+
+        existe = db.session.scalar(
+            db.select(Facilitador).where(Facilitador.email == email)
+        )
+        if existe is None:
+            solicitante = Facilitador(
+                email=email,
+                nombre=nombre,
+                organizacion=organizacion[:255],
+                es_admin=False,
+                aprobado=False,
+            )
+            # Misma invariante que el panel: el sistema nunca fija una clave que
+            # alguien conozca. Si la solicitud se aprueba, el titular establece
+            # la suya con el enlace de activacion.
+            solicitante.set_password(secrets.token_urlsafe(32))
+            db.session.add(solicitante)
+            try:
+                db.session.commit()
+            except IntegrityError:
+                # Carrera: dos solicitudes con el mismo correo a la vez. La
+                # respuesta al usuario no cambia.
+                db.session.rollback()
+
+        flash(
+            "Recibimos tu solicitud. Si corresponde, recibirás un enlace para "
+            "activar tu cuenta.",
+            "success",
+        )
+        return redirect(url_for("auth.login"))
+
+    return render_template(
+        "auth/solicitud.html", nombre="", email="", organizacion=""
+    )
 
 
 @bp.route("/logout")

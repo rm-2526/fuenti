@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}Solicitar acceso - Fuenti{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-7 col-lg-6">
+    <div class="card mt-4">
+      <div class="card-body">
+        <h1 class="h4 mb-3">Solicitar acceso</h1>
+
+        <p class="text-muted">
+          Las cuentas de facilitador se crean por invitación. Déjanos estos
+          datos y un administrador revisará la solicitud. Si se aprueba,
+          recibirás un enlace para establecer tu contraseña.
+        </p>
+
+        <form method="POST" action="{{ url_for('auth.solicitud') }}">
+          <div class="mb-3">
+            <label for="nombre" class="form-label">Nombre y apellido</label>
+            <input type="text" class="form-control" id="nombre" name="nombre"
+                   value="{{ nombre }}" maxlength="255" autofocus required>
+          </div>
+
+          <div class="mb-3">
+            <label for="email" class="form-label">Correo</label>
+            <input type="email" class="form-control" id="email" name="email"
+                   value="{{ email }}" maxlength="255" required>
+            <div class="form-text">
+              A esta dirección se enviará el enlace de activación si la
+              solicitud se aprueba.
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label for="organizacion" class="form-label">Organización</label>
+            <input type="text" class="form-control" id="organizacion"
+                   name="organizacion" value="{{ organizacion }}"
+                   maxlength="255" required>
+            <div class="form-text">
+              Empresa o institución para la que dictas las capacitaciones.
+            </div>
+          </div>
+
+          {# Mismo criterio que la pantalla de ingreso del participante: se
+             informa el tratamiento, no se pide una casilla de aceptación. #}
+          <p class="text-muted small">
+            Los datos de este formulario se usan únicamente para evaluar la
+            solicitud.
+          </p>
+
+          <button type="submit" class="btn btn-primary w-100">
+            Enviar solicitud
+          </button>
+        </form>
+
+        <p class="text-center mt-3 mb-0">
+          <a href="{{ url_for('auth.login') }}" class="link-secondary small">
+            ¿Ya tienes cuenta? Inicia sesión
+          </a>
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

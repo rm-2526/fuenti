@@ -53,12 +53,18 @@ def test_la_portada_no_necesita_javascript(client):
     assert "<script" not in html
 
 
-def test_la_portada_ofrece_como_contactar(client):
-    """Sin registro publico, escribir es el unico camino para una cuenta
-    nueva. Si el enlace se rompe, el visitante interesado queda sin salida."""
+def test_la_portada_ofrece_como_pedir_una_cuenta(client):
+    """Sin registro publico, la solicitud es el unico camino para una cuenta
+    nueva. Si el enlace se rompe, el visitante interesado queda sin salida.
+
+    Antes esto apuntaba a un mailto. Se reemplazo por el formulario: la
+    direccion de correo no existia, y un boton que promete contacto y lleva a
+    un buzon inexistente es peor que no ofrecer nada.
+    """
     html = client.get("/").data.decode("utf-8")
 
-    assert "mailto:" in html
+    assert "/solicitud" in html
+    assert "mailto:" not in html
 
 
 def test_facilitador_conectado_ve_el_acceso_al_panel(client, facilitador):
