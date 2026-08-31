@@ -119,9 +119,19 @@
             <div class="qr-sesion border rounded p-2 bg-white">
               {{ qr_ingreso | safe }}
             </div>
-            <p class="text-muted small mb-0">
-              También pueden entrar escaneando este código.
-            </p>
+            <div>
+              <p class="text-muted small mb-2">
+                También pueden entrar escaneando este código.
+              </p>
+              {# El QR se descarga como PNG con fondo blanco incorporado, para
+                 que se lea al pegarlo en una diapositiva o imprimirlo sin
+                 depender de la superficie. Ver el script al final. #}
+              <button type="button"
+                      id="descargar-qr"
+                      class="btn btn-sm btn-outline-secondary no-print">
+                Descargar QR
+              </button>
+            </div>
           </div>
 
           <p class="text-muted small">
@@ -378,4 +388,83 @@
   }
 })();
 </script>
+
+{#
+  Descarga del QR como PNG.
+
+  Por qué convertir y no ofrecer el SVG directo: PowerPoint y Word lo insertan
+  bien, pero muchas personas abren un .svg esperando una foto y se confunden.
+  El PNG se pega en cualquier parte.
+
+  Dos decisiones que NO son cosméticas:
+
+  - Factor entero (x4). Cada módulo queda en un número exacto de píxeles. Es la
+    misma razón por la que qr.py advierte no reescalar con CSS: un factor
+    fraccionario difumina el borde del módulo y la cámara deja de leer.
+
+  - Fondo blanco pintado ANTES de dibujar. El canvas nace transparente, y un QR
+    transparente pegado sobre fondo oscuro no lo lee ningún teléfono. Pintarlo
+    después taparía el código.
+
+  La zona de silencio no hay que agregarla: viene en el SVG (border=4 en qr.py).
+#}
+{% if sesion.estado == "abierta" %}
+<script>
+(function () {
+  var boton = document.getElementById("descargar-qr");
+  if (!boton) { return; }
+
+  boton.addEventListener("click", function () {
+    var svg = document.querySelector(".qr-sesion svg");
+    if (!svg) { return; }
+
+    var lado = svg.width.baseVal.value;   // 164 px, el tamaño nativo
+    var FACTOR = 4;                       // entero, a propósito
+
+    // El SVG en línea no lleva namespace: qr.py lo genera con svgns=False
+    // porque dentro del HTML lo aporta el documento. Como archivo suelto sí
+    // lo necesita.
+    var copia = svg.cloneNode(true);
+    copia.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    copia.setAttribute("shape-rendering", "crispEdges");
+
+    var fuente = new XMLSerializer().serializeToString(copia);
+    var urlSvg = URL.createObjectURL(
+      new Blob([fuente], { type: "image/svg+xml;charset=utf-8" })
+    );
+
+    var img = new Image();
+
+    img.onload = function () {
+      var canvas = document.createElement("canvas");
+      canvas.width = lado * FACTOR;
+      canvas.height = lado * FACTOR;
+
+      var ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(urlSvg);
+
+      canvas.toBlob(function (blob) {
+        var enlace = document.createElement("a");
+        enlace.href = URL.createObjectURL(blob);
+        enlace.download = "qr-sesion-{{ sesion.codigo }}.png";
+        document.body.appendChild(enlace);
+        enlace.click();
+        document.body.removeChild(enlace);
+        URL.revokeObjectURL(enlace.href);
+      }, "image/png");
+    };
+
+    img.onerror = function () {
+      URL.revokeObjectURL(urlSvg);
+    };
+
+    img.src = urlSvg;
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}

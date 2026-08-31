@@ -62,8 +62,71 @@
               Puedes escribirlo con puntos y guion, o sin nada.
             </div>-->
           </div>
+          {# Aviso por capas: el enlace informa que hay un tratamiento y el
+             detalle vive en el modal, para no empujar el botón fuera de
+             pantalla en celular. Va ANTES del botón porque es el último punto
+             donde la persona decide entregar el dato.
+
+             Sin casilla de aceptación a propósito: en una capacitación
+             dispuesta por el empleador el consentimiento no cumple la
+             condición de libertad, así que pedirlo daría apariencia de
+             voluntariedad a un tratamiento cuya licitud no descansa en él.
+             El deber que sí aplica es informar, y eso es lo que hace esto. #}
+          <p class="text-center mb-3">
+            <a href="#"
+               class="link-secondary small"
+               data-bs-toggle="modal"
+               data-bs-target="#modalDatos">Sobre tus datos</a>
+          </p>
+
           <button type="submit" class="btn btn-primary w-100">Ingresar</button>
         </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Detalle del aviso. El botón dice "Cerrar" y no "Acepto": esto informa, no
+   pide permiso. #}
+<div class="modal fade" id="modalDatos" tabindex="-1"
+     aria-labelledby="modalDatosTitulo" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="modalDatosTitulo">Sobre tus datos</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"
+                aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2"><strong>Qué se recoge.</strong> Tu nombre y tu RUT.</p>
+
+        <p class="mb-2">
+          <strong>Para qué.</strong> Identificar tu rendición y construir tu
+          historial de capacitación entre distintas evaluaciones.
+        </p>
+
+        <p class="mb-2">
+          <strong>Cómo se guardan.</strong> Tu nombre se conserva tal como lo
+          escribes, porque aparece en los informes que recibe la organización.
+          Tu RUT se transforma mediante una función que no permite
+          reconstruirlo: el sistema no conserva el número tal como lo
+          escribiste.
+        </p>
+
+        <p class="mb-2">
+          <strong>Quién recibe los resultados.</strong> La organización que
+          contrató esta capacitación.
+        </p>
+
+        <p class="mb-0">
+          <strong>Tus derechos.</strong> Puedes solicitar acceso, rectificación,
+          cancelación u oposición sobre tus datos a través del facilitador de
+          esta sesión.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary"
+                data-bs-dismiss="modal">Cerrar</button>
       </div>
     </div>
   </div>
