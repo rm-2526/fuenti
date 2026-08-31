@@ -88,10 +88,14 @@ def create_app(config_class: type = Config) -> Flask:
         return render_template("index.html")
     
     @app.route("/ayuda")
-    @login_required
     def ayuda():
         """Manual del facilitador. Pagina fija, sin estado: es el destino del
-        modal de bienvenida y del enlace del menu."""
+        modal de bienvenida y del enlace del menu.
+
+        Publica a proposito. No consulta la base de datos ni recibe parametros:
+        no hay dato de nadie que proteger, y las capturas que muestra son de la
+        interfaz. Abrirla permite citarla desde el informe, compartirla por
+        enlace y que un facilitador la lea antes de que le creen la cuenta."""
         return render_template("ayuda.html")
 
     @app.route("/dashboard")

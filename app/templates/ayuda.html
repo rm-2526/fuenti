@@ -97,7 +97,14 @@
   <h1 class="h3 mb-0">Cómo funciona Fuenti</h1>
   <div class="no-print d-flex gap-2">
     
-    <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">Volver al panel</a>
+    {# La pagina es publica: quien llega sin sesion iniciada no tiene panel al
+       cual volver, y mandarlo ahi lo deja en la pantalla de acceso sin
+       explicacion. #}
+    {% if current_user.is_authenticated %}
+      <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">Volver al panel</a>
+    {% else %}
+      <a href="{{ url_for('auth.login') }}" class="btn btn-outline-secondary">Iniciar sesión</a>
+    {% endif %}
   </div>
 </div>
 

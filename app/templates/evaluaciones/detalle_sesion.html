@@ -157,9 +157,14 @@
      {% if resumen.total_finalizados > 0 %}hidden{% endif %}>
   <span id="vacio-texto">Aún no hay resultados en esta sesión.
     {% if resumen.total_participantes > 0 %}
-      {{ resumen.total_participantes }}
+      {# "Hay" es invariable: solo hay que pluralizar el sustantivo. La version
+         anterior decia "3 participantes ingreso", porque pluralizaba el
+         sustantivo y dejaba el verbo en singular. Este texto esta DUPLICADO en
+         el script del sondeo, mas abajo: si se cambia aca y no alla, el mensaje
+         se ve bien al cargar y vuelve a fallar a los diez segundos. #}
+      Hay {{ resumen.total_participantes }}
       participante{{ 's' if resumen.total_participantes != 1 else '' }}
-      ingresó pero todavía nadie termina la evaluación.
+      en la sesión, pero todavía nadie ha terminado la evaluación.
     {% else %}
       Nadie ha ingresado todavía.
     {% endif %}
@@ -336,8 +341,11 @@
     if (d.total_finalizados === 0) {
       var t = "Aún no hay resultados en esta sesión. ";
       if (d.total_participantes > 0) {
-        t += d.total_participantes + " participante" + plural(d.total_participantes) +
-             " ingresó pero todavía nadie termina la evaluación.";
+        // Debe decir lo mismo que el bloque de arriba. Si cambia uno y no el
+        // otro, el texto se ve bien al cargar y se rompe en el primer sondeo.
+        t += "Hay " + d.total_participantes + " participante" +
+             plural(d.total_participantes) +
+             " en la sesión, pero todavía nadie ha terminado la evaluación.";
       } else {
         t += "Nadie ha ingresado todavía.";
       }

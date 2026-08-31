@@ -1,7 +1,7 @@
 """Pagina de ayuda y modal de bienvenida.
 
 La ayuda es una pagina fija y sin estado, asi que lo que hay que garantizar es
-poco pero importante: que exista, que exija sesion iniciada, que este enlazada
+poco pero importante: que exista, que sea publica, que este enlazada
 desde el menu (o queda huerfana) y que el modal viva SOLO en el panel.
 """
 
@@ -14,12 +14,13 @@ def _login(client, facilitador):
     )
 
 
-def test_la_ayuda_exige_sesion_iniciada(client):
-    """Es documentacion interna del facilitador, no una pagina publica."""
+def test_la_ayuda_es_publica(client):
+    """Es el manual de usuario, no datos operativos: se consulta sin cuenta
+    para poder citarla desde el informe y compartirla por enlace."""
     respuesta = client.get("/ayuda")
 
-    assert respuesta.status_code == 302
-    assert "/login" in respuesta.headers["Location"]
+    assert respuesta.status_code == 200
+    assert "Cómo funciona Fuenti" in respuesta.data.decode("utf-8")
 
 
 def test_la_ayuda_cubre_los_cinco_pasos(client, facilitador):
