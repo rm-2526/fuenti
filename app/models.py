@@ -67,6 +67,13 @@ class Evaluacion(db.Model):
     titulo: Mapped[str] = mapped_column(String(200), nullable=False)
     umbral_aprobacion: Mapped[int] = mapped_column(Integer, nullable=False)  # 0-100
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=ahora_utc)
+    # "Eliminar" una evaluación con participantes NUNCA borra sus sesiones,
+    # respuestas ni resultados: eso es la evidencia que el sistema existe
+    # para conservar. En vez de destruir nada, la marca como archivada y el
+    # listado de Biblioteca (evaluaciones.listado) deja de mostrarla. Informes
+    # no consulta esta columna en absoluto: las sesiones cerradas de una
+    # evaluación archivada se ven exactamente igual que antes de archivarla.
+    archivada: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     facilitador: Mapped["Facilitador"] = relationship(back_populates="evaluaciones")
     preguntas: Mapped[list["Pregunta"]] = relationship(

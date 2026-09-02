@@ -8,6 +8,7 @@ from app.models import (
     Participante,
     Pregunta,
     Respuesta,
+    Resultado,
     Sesion,
 )
 
@@ -210,9 +211,17 @@ def test_detalle_de_evaluacion_ajena_es_403(client, facilitador, app):
     assert resp.status_code == 403
 
 
-# -------------------- Eliminar --------------------
+# -------------------- Eliminar (en realidad: archivar) --------------------
+#
+# "Eliminar" una evaluación desde la Biblioteca nunca borra su fila ni nada
+# de lo que cuelga de ella. La marca como archivada, y solo el listado de
+# Biblioteca (y el de Iniciar) dejan de mostrarla. Informes no filtra por
+# esta columna: las sesiones cerradas se siguen viendo igual, tengan o no
+# participantes, archivada la evaluación o no. Ver el docstring de la ruta
+# eliminar() para el porqué de este diseño.
 
-def test_eliminar_propia_funciona(client, facilitador, app):
+
+def test_eliminar_archiva_en_vez_de_borrar(client, facilitador, app):
     _login(client)
     client.post("/evaluaciones/nueva", data=_payload_valido(), follow_redirects=True)
 
@@ -222,12 +231,15 @@ def test_eliminar_propia_funciona(client, facilitador, app):
 
     resp = client.post(f"/evaluaciones/{eval_id}/eliminar", follow_redirects=True)
     assert resp.status_code == 200
+    assert "eliminada de tu biblioteca".encode() in resp.data
 
     with app.app_context():
-        assert db.session.query(Evaluacion).count() == 0
-        # Cascada verificada: no quedaron preguntas ni alternativas
-        assert db.session.query(Pregunta).count() == 0
-        assert db.session.query(Alternativa).count() == 0
+        # Nada se borró: ni la evaluación, ni sus preguntas, ni sus alternativas.
+        e = db.session.get(Evaluacion, eval_id)
+        assert e is not None
+        assert e.archivada is True
+        assert db.session.query(Pregunta).count() == 1
+        assert db.session.query(Alternativa).count() == 2
 
 
 def test_eliminar_ajena_es_403(client, facilitador, app):
@@ -250,9 +262,110 @@ def test_eliminar_ajena_es_403(client, facilitador, app):
     assert resp.status_code == 403
 
     with app.app_context():
-        assert db.session.get(Evaluacion, eval_id_ajena) is not None
+        e = db.session.get(Evaluacion, eval_id_ajena)
+        assert e is not None
+        assert e.archivada is False  # el 403 impidió que se archivara
 
-# ==================== Editar evaluación ====================
+
+def test_eliminar_con_participantes_conserva_todo(client, facilitador, app):
+    """El caso que motivó este diseño: una evaluación con una sesión cerrada
+    y un participante con resultado. 'Eliminarla' debe archivarla, sin tocar
+    ni la sesión, ni el participante, ni la respuesta, ni el resultado."""
+    from app.utils.rut import hash_rut
+
+    _login(client)
+    client.post("/evaluaciones/nueva", data=_payload_valido(), follow_redirects=True)
+    with app.app_context():
+        e = db.session.query(Evaluacion).one()
+        eval_id = e.id
+        s = Sesion(
+            evaluacion_id=eval_id, codigo="PROTEG1", estado="cerrada",
+            umbral_aprobacion=e.umbral_aprobacion,
+        )
+        db.session.add(s)
+        db.session.flush()
+        salt = app.config["RUT_SALT"]
+        p = Participante(
+            sesion_id=s.id,
+            identificador_hash=hash_rut("45.278.361-4", salt),
+        )
+        db.session.add(p)
+        db.session.flush()
+        r = Resultado(
+            participante_id=p.id, puntaje=1, total_preguntas=1,
+            porcentaje=100.0, nota=7.0, aprobado=True,
+        )
+        db.session.add(r)
+        db.session.commit()
+
+    resp = client.post(f"/evaluaciones/{eval_id}/eliminar", follow_redirects=True)
+
+    assert resp.status_code == 200
+    assert "eliminada de tu biblioteca".encode() in resp.data
+    with app.app_context():
+        e = db.session.get(Evaluacion, eval_id)
+        assert e is not None and e.archivada is True
+        assert db.session.query(Sesion).count() == 1
+        assert db.session.query(Participante).count() == 1
+        assert db.session.query(Resultado).count() == 1
+
+
+def test_evaluacion_archivada_desaparece_de_biblioteca_y_de_iniciar(
+    client, facilitador, app
+):
+    _login(client)
+    client.post("/evaluaciones/nueva", data=_payload_valido(), follow_redirects=True)
+    with app.app_context():
+        eval_id = db.session.query(Evaluacion).one().id
+
+    client.post(f"/evaluaciones/{eval_id}/eliminar")
+
+    # El flash de éxito ("...eliminada de tu biblioteca") contiene el propio
+    # título, así que se consume con una petición de descarte antes de
+    # revisar las páginas: si no, el título "aparece" en el flash y la
+    # aserción de abajo daría un falso negativo, sin que sea un bug real.
+    client.get("/dashboard")
+
+    resp_biblioteca = client.get("/evaluaciones")
+    resp_iniciar = client.get("/evaluaciones/iniciar")
+    with app.app_context():
+        titulo = db.session.get(Evaluacion, eval_id).titulo
+    assert titulo not in resp_biblioteca.data.decode()
+    assert titulo not in resp_iniciar.data.decode()
+
+
+def test_evaluacion_archivada_sigue_visible_en_informes(client, facilitador, app):
+    """Este es el requisito central: informes NO debe filtrar por archivada.
+    Una sesión cerrada con resultados sigue apareciendo en Informes aunque su
+    evaluación ya no aparezca en Biblioteca."""
+    from app.utils.rut import hash_rut
+
+    _login(client)
+    client.post("/evaluaciones/nueva", data=_payload_valido(), follow_redirects=True)
+    with app.app_context():
+        e = db.session.query(Evaluacion).one()
+        eval_id, titulo = e.id, e.titulo
+        s = Sesion(
+            evaluacion_id=eval_id, codigo="VISIBLE1", estado="cerrada",
+            umbral_aprobacion=e.umbral_aprobacion,
+        )
+        db.session.add(s)
+        db.session.flush()
+        salt = app.config["RUT_SALT"]
+        p = Participante(
+            sesion_id=s.id, identificador_hash=hash_rut("45.278.361-4", salt),
+        )
+        db.session.add(p)
+        db.session.commit()
+
+    client.post(f"/evaluaciones/{eval_id}/eliminar")  # se archiva
+
+    resp = client.get("/evaluaciones/informes")
+    assert resp.status_code == 200
+    assert titulo in resp.data.decode()
+    assert "VISIBLE1" in resp.data.decode()
+
+
 
 def _crear_eval_directa(app, facilitador_id, titulo="Editable", umbral=60):
     """Crea directamente en BD una evaluacion con 1 pregunta ('¿2+2?') y 2

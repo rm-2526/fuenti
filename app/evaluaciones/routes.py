@@ -62,7 +62,7 @@ _MAX_REINTENTOS_CODIGO = 5
 def listado():
     evaluaciones = (
         db.session.query(Evaluacion)
-        .filter_by(facilitador_id=current_user.id)
+        .filter_by(facilitador_id=current_user.id, archivada=False)
         .order_by(Evaluacion.created_at.desc())
         .all()
     )
@@ -74,11 +74,13 @@ def listado():
 def iniciar():
     """Pagina de lanzamiento: lista las evaluaciones del facilitador para abrir
     una sesion. Reusa la ruta abrir_sesion; las evaluaciones sin preguntas
-    aparecen con el boton deshabilitado.
+    aparecen con el boton deshabilitado. Las archivadas no aparecen aca
+    tampoco: si se archivó, tampoco tiene sentido ofrecer abrir una sesión
+    nueva con ella.
     """
     evaluaciones = (
         db.session.query(Evaluacion)
-        .filter_by(facilitador_id=current_user.id)
+        .filter_by(facilitador_id=current_user.id, archivada=False)
         .order_by(Evaluacion.created_at.desc())
         .all()
     )
@@ -341,10 +343,30 @@ def editar(eval_id):
 @bp.route("/<int:eval_id>/eliminar", methods=["POST"])
 @login_required
 def eliminar(eval_id):
+    """"Elimina" una evaluación de la Biblioteca. En realidad la archiva.
+
+    Nunca se borra la fila de Evaluacion ni nada de lo que cuelga de ella
+    (preguntas, sesiones, participantes, respuestas, resultados). El botón se
+    llama "Eliminar" porque para quien lo usa el efecto es ese: la evaluación
+    deja de aparecer en su Biblioteca. Pero lo que ocurre por dentro es
+    marcar `archivada = True`, y el filtro que la esconde vive únicamente en
+    evaluaciones.listado.
+
+    Informes (evaluaciones.informes) NO filtra por esta columna: las
+    sesiones cerradas de una evaluación archivada se siguen viendo igual que
+    antes, con sus resultados intactos. Es la vía que resuelve, sin tocar el
+    esquema de Sesion ni las rutas de informes, la razón por la que existe
+    este botón: limpiar el catálogo de evaluaciones activas sin arriesgar la
+    evidencia de aprendizaje que ya se generó.
+
+    No hay una vía en la interfaz para desarchivar todavía. Si llegas a
+    necesitarla, es un cambio menor (un filtro adicional en el listado y un
+    botón que ponga archivada=False de nuevo).
+    """
     evaluacion = _get_evaluacion_propia(eval_id)
-    db.session.delete(evaluacion)
+    evaluacion.archivada = True
     db.session.commit()
-    flash(f'Evaluación "{evaluacion.titulo}" eliminada.', "success")
+    flash(f'Evaluación "{evaluacion.titulo}" eliminada de tu biblioteca.', "success")
     return redirect(url_for("evaluaciones.listado"))
 
 
