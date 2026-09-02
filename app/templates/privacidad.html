@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}Privacidad - Fuenti{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8 col-lg-6">
+    <h1 class="h3 mb-4">Privacidad</h1>
+
+    <p class="mb-2"><strong>Qué se recoge.</strong> Cuando participas en una
+      evaluación, Fuenti guarda tu nombre y tu RUT.</p>
+
+    <p class="mb-2"><strong>Para qué.</strong> Identificar tu rendición y
+      construir tu historial de capacitación entre distintas evaluaciones.</p>
+
+    <p class="mb-2"><strong>Cómo se guardan.</strong> Tu nombre se conserva
+      tal como lo escribes, porque aparece en los informes que recibe la
+      organización. Tu RUT se transforma mediante una función que no permite
+      reconstruirlo: el sistema no conserva el número tal como lo
+      escribiste, en ningún lugar, incluida esta página.</p>
+
+    <p class="mb-4"><strong>Quién recibe los resultados.</strong> La
+      organización que contrató la capacitación en la que participaste.</p>
+
+    <hr class="my-4">
+
+    <h2 class="h5 mb-3">Solicitar la eliminación de tus datos</h2>
+    <p class="text-body-secondary small mb-3">
+      Escribe el RUT con el que participaste. Un administrador revisará la
+      solicitud y, si corresponde, eliminará de forma permanente tu nombre,
+      tus respuestas y tus resultados de todas las evaluaciones donde
+      aparezcan. Esta acción no se puede deshacer.
+    </p>
+
+    <form method="POST" action="{{ url_for('privacidad') }}">
+      <div class="mb-3">
+        <label for="rut" class="form-label">RUT</label>
+        <input type="text"
+               class="form-control"
+               id="rut"
+               name="rut"
+               value="{{ rut }}"
+               placeholder="15.432.198-5"
+               autocomplete="off"
+               autocapitalize="characters"
+               spellcheck="false"
+               data-rut
+               required>
+        <div class="valid-feedback" aria-live="polite">RUT válido.</div>
+        <div class="invalid-feedback" aria-live="polite">
+          Revisa el RUT: no corresponde a uno válido.
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label for="contacto" class="form-label">
+          Correo o teléfono <span class="text-muted">(opcional)</span>
+        </label>
+        <input type="text"
+               class="form-control"
+               id="contacto"
+               name="contacto"
+               value="{{ contacto }}"
+               placeholder="Para que te contactemos si hay dudas"
+               maxlength="255">
+        <div class="form-text">
+          No es obligatorio. Fuenti no le pide correo a nadie para rendir una
+          evaluación, así que dejarlo aquí es solo para que un administrador
+          pueda escribirte si necesita confirmar algo antes de eliminar tus
+          datos.
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary w-100">
+        Solicitar eliminación
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/rut.js') }}"></script>
+{% endblock %}

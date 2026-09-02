@@ -1,9 +1,11 @@
 {% extends "base.html" %}
+{% from "admin/_nav.html" import nav %}
 
 {% block title %}Facilitadores - Fuenti{% endblock %}
 
 {% block content %}
-<h1 class="h3 mb-4">Facilitadores</h1>
+<h1 class="h3 mb-4">Administración</h1>
+{{ nav('facilitadores', pendientes_eliminacion) }}
 
 {# Solicitudes pendientes: van arriba y solo aparecen si hay alguna. Es lo
    unico de esta pantalla que espera una decision; el resto es consulta. #}

@@ -29,7 +29,14 @@ from sqlalchemy.exc import IntegrityError
 
 from app import db
 from app.admin import bp
-from app.models import Facilitador
+from app.models import (
+    Evaluacion,
+    Facilitador,
+    Participante,
+    Sesion,
+    SolicitudEliminacion,
+    ahora_utc,
+)
 from app.utils.activacion import generar_token
 
 
@@ -131,7 +138,24 @@ def facilitadores():
         .order_by(Facilitador.created_at)
     ).all()
     return render_template(
-        "admin/facilitadores.html", facilitadores=lista, pendientes=pendientes
+        "admin/facilitadores.html",
+        facilitadores=lista,
+        pendientes=pendientes,
+        pendientes_eliminacion=_contar_eliminaciones_pendientes(),
+    )
+
+
+def _contar_eliminaciones_pendientes() -> int:
+    """Cuenta de solicitudes de eliminación en 'pendiente'.
+
+    Se usa en la pestaña de Facilitadores (para el badge de la navegación
+    compartida) y en la propia pantalla de eliminaciones. Es una consulta
+    liviana (COUNT), separada de listar las solicitudes completas.
+    """
+    return db.session.scalar(
+        db.select(db.func.count())
+        .select_from(SolicitudEliminacion)
+        .where(SolicitudEliminacion.estado == "pendiente")
     )
 
 
@@ -314,3 +338,134 @@ def rechazar_solicitud(fid):
     db.session.commit()
     flash(f"Solicitud de \"{email}\" rechazada.", "info")
     return redirect(url_for("admin.facilitadores"))
+
+
+# --------------------- Solicitudes de eliminación de datos ---------------------
+#
+# Pestaña hermana de Facilitadores dentro del mismo panel de administración:
+# ambas gestionan quién puede estar en el sistema y qué datos conserva, así
+# que comparten la navegación (ver admin/_nav.html) aunque viven en tablas
+# distintas y no tienen relación entre sí.
+
+
+def _resumen_de_solicitud(s: SolicitudEliminacion):
+    """Participaciones que el hash de esta solicitud tiene HOY en el sistema.
+
+    Se calcula en vivo (no se guarda snapshot) porque el numero puede crecer
+    entre que alguien pide la eliminacion y un administrador la revisa: la
+    misma persona podria rendir otra evaluacion mientras tanto. Nunca expone
+    el RUT ni el hash en la plantilla, solo a que evaluaciones y sesiones
+    corresponde, que es lo que el administrador necesita para decidir.
+    """
+    return db.session.execute(
+        db.select(
+            Evaluacion.titulo, Sesion.codigo, Participante.finalizado_at
+        )
+        .join(Sesion, Sesion.id == Participante.sesion_id)
+        .join(Evaluacion, Evaluacion.id == Sesion.evaluacion_id)
+        .where(Participante.identificador_hash == s.identificador_hash)
+        .order_by(Participante.finalizado_at)
+    ).all()
+
+
+@bp.route("/eliminaciones")
+@admin_required
+def eliminaciones():
+    pendientes = db.session.scalars(
+        db.select(SolicitudEliminacion)
+        .where(SolicitudEliminacion.estado == "pendiente")
+        .order_by(SolicitudEliminacion.solicitado_at)
+    ).all()
+    # Historial acotado: es para auditoria rapida, no un registro sin fin.
+    resueltas = db.session.scalars(
+        db.select(SolicitudEliminacion)
+        .where(SolicitudEliminacion.estado != "pendiente")
+        .order_by(SolicitudEliminacion.resuelta_at.desc())
+        .limit(50)
+    ).all()
+
+    resumenes = {s.id: _resumen_de_solicitud(s) for s in pendientes}
+
+    return render_template(
+        "admin/eliminaciones.html",
+        pendientes=pendientes,
+        resueltas=resueltas,
+        resumenes=resumenes,
+        pendientes_eliminacion=len(pendientes),
+    )
+
+
+def _get_solicitud(sid):
+    s = db.session.get(SolicitudEliminacion, sid)
+    if s is None:
+        abort(404)
+    return s
+
+
+@bp.route("/eliminaciones/<int:sid>/aprobar", methods=["POST"])
+@admin_required
+def aprobar_eliminacion(sid):
+    """Borra físicamente todas las participaciones del hash solicitado.
+
+    Es, junto con rechazar_solicitud (facilitadores nunca aprobados), una de
+    las dos únicas operaciones del sistema que borran datos de verdad. Borra
+    Participante; Respuesta y Resultado se van por la cascada ya declarada en
+    el modelo. Alcanza a TODAS las evaluaciones donde aparezca el hash, sin
+    importar de qué facilitador sean: el titular del dato pidió que se vaya
+    de todas partes, no solo de una.
+    """
+    s = _get_solicitud(sid)
+    if s.estado != "pendiente":
+        # Ya no es una solicitud pendiente: no hay nada que aprobar de nuevo.
+        abort(403)
+
+    participantes = db.session.scalars(
+        db.select(Participante).where(
+            Participante.identificador_hash == s.identificador_hash
+        )
+    ).all()
+    cantidad = len(participantes)
+    for p in participantes:
+        db.session.delete(p)
+
+    s.estado = "aprobada"
+    s.resuelta_at = ahora_utc()
+    s.resuelta_por_id = current_user.id
+    db.session.commit()
+
+    if cantidad:
+        flash(
+            f"Datos eliminados: {cantidad} participación(es) borradas de forma "
+            "permanente.",
+            "success",
+        )
+    else:
+        flash(
+            "Solicitud aprobada. No se encontró ninguna participación asociada "
+            "a ese RUT (puede que ya no quedara ninguna, o que nunca haya "
+            "rendido una evaluación).",
+            "info",
+        )
+    return redirect(url_for("admin.eliminaciones"))
+
+
+@bp.route("/eliminaciones/<int:sid>/rechazar", methods=["POST"])
+@admin_required
+def rechazar_eliminacion(sid):
+    """Descarta la solicitud sin borrar ningún dato.
+
+    A diferencia de rechazar_solicitud (facilitadores), aquí el registro NO
+    se borra: se conserva como 'rechazada' para dejar constancia de que la
+    solicitud existió y fue evaluada, con quién y cuándo. No hay un correo
+    único que liberar (el mismo RUT puede volver a solicitar cuando quiera).
+    """
+    s = _get_solicitud(sid)
+    if s.estado != "pendiente":
+        abort(403)
+
+    s.estado = "rechazada"
+    s.resuelta_at = ahora_utc()
+    s.resuelta_por_id = current_user.id
+    db.session.commit()
+    flash("Solicitud rechazada. No se eliminó ningún dato.", "info")
+    return redirect(url_for("admin.eliminaciones"))

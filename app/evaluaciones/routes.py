@@ -533,6 +533,13 @@ def informe_todos(eval_id, sesion_id):
     evaluacion = _get_evaluacion_propia(eval_id)
     sesion = _get_sesion_de_evaluacion(evaluacion, sesion_id)
 
+    # El análisis narrativo del GRUPO se genera aquí, la primera vez que se
+    # abre este informe, y no al cerrar la sesión. Ver el comentario en
+    # cerrar_sesion para el porqué; ver _generar_analisis_ia para la
+    # idempotencia (no vuelve a llamar al modelo si sesion.analisis_ia ya
+    # tiene contenido).
+    _generar_analisis_ia(sesion)
+
     matriz = _matriz_de_sesion(evaluacion, sesion)
 
     return render_template(
@@ -700,10 +707,15 @@ def cerrar_sesion(eval_id, sesion_id):
         sesion.estado = "cerrada"
         sesion.cerrada_at = ahora_utc()
         db.session.commit()
-        # Cerrar es el momento natural para congelar el análisis DEL GRUPO: los
-        # resultados ya no cambian. Va DESPUÉS del commit y envuelto para que un
-        # fallo de la IA nunca impida cerrar la sesión.
-        _generar_analisis_ia(sesion)
+        # El análisis narrativo del GRUPO ya NO se genera aquí. Cerrar debe
+        # quedar como una operación puramente de base de datos: un cambio de
+        # estado y un commit, sin ninguna llamada de red de por medio. La
+        # llamada a Gemini se traslada a la primera apertura del informe de
+        # sesión (ver informe_todos), con el mismo patrón perezoso que ya
+        # tenía el análisis individual (_analisis_persona_perezoso). Motivo:
+        # una petición HTTP de cierre no debe depender del tiempo de
+        # respuesta de un servicio externo, que es variable y, en el peor
+        # caso, puede exceder el plazo del servidor.
         flash("Sesión cerrada. No aceptará nuevos ingresos.", "success")
 
     return redirect(
@@ -712,25 +724,31 @@ def cerrar_sesion(eval_id, sesion_id):
 
 
 def _generar_analisis_ia(sesion: Sesion) -> None:
-    """Wrapper del CIERRE de sesión: genera SOLO el análisis del grupo.
+    """Genera SOLO el análisis del GRUPO, la primera vez que se abre el
+    informe de sesión (informe_todos). Es el equivalente, a nivel de sesión,
+    de _analisis_persona_perezoso: una llamada por informe abierto, no una
+    llamada por participante encadenada dentro de otra petición.
 
-    Por qué solo el grupo. Hasta la prueba de cargabilidad, el cierre generaba
-    también el análisis de cada participante. Con treinta personas son treinta
-    y una llamadas encadenadas, espaciadas varios segundos entre sí para no
-    pasarse del límite por minuto del plan gratuito: más de dos minutos de
-    ejecución dentro de una sola petición HTTP. El servidor WSGI corta el
-    trabajador mucho antes y el facilitador recibe un error de servidor,
-    aunque la sesión sí haya quedado cerrada.
-
-    Ahora el cierre hace una única llamada, la del grupo, que es la que el
-    facilitador necesita de inmediato al terminar la actividad. El análisis
-    individual se genera al abrir cada informe (ver _analisis_persona_perezoso),
-    de modo que las llamadas se reparten en el tiempo en lugar de acumularse.
+    Historia de por qué no vive en el cierre. Hasta la prueba de
+    cargabilidad, el cierre generaba el análisis de cada participante Y el
+    del grupo en la misma petición. Con treinta personas eran treinta y una
+    llamadas encadenadas: más de dos minutos de ejecución, que el servidor
+    WSGI corta mucho antes (SIGKILL o 500), aunque la sesión sí quedara
+    cerrada. La solución de esa vez fue sacar el análisis individual del
+    cierre; la de ahora es sacar también el del grupo, porque incluso una
+    sola llamada a un servicio externo es tiempo variable dentro de una
+    operación (cerrar) que debe sentirse instantánea para quien está frente a
+    un grupo esperando. Cerrar hoy es solo un cambio de estado y un commit.
 
     Degrada en silencio: sin API key no hace nada; cualquier error se traga
-    para que cerrar la sesión nunca falle por culpa de la IA. El backfill por
-    consola usa el mismo núcleo (generar_analisis_de_sesion) con
-    incluir_personas=True y SÍ reporta lo que hizo.
+    para que abrir el informe nunca falle por culpa de la IA (el informe se
+    ve igual, solo sin el bloque de análisis). Es idempotente
+    (generar_analisis_de_sesion solo genera si sesion.analisis_ia está en
+    NULL), así que si una llamada falla, la siguiente vez que se abra este
+    mismo informe se reintenta sola, sin acción del facilitador.
+
+    El backfill por consola usa el mismo núcleo (generar_analisis_de_sesion)
+    con incluir_personas=True y SÍ reporta lo que hizo.
     """
     api_key = current_app.config.get("GEMINI_API_KEY")
     if not api_key:
@@ -813,10 +831,12 @@ def generar_analisis_de_sesion(
     aparece un 429. '_sleep' se inyecta para poder testear sin esperar de verdad.
 
     'incluir_personas' distingue a los dos llamadores. El backfill por consola
-    lo deja en True y genera todo lo que falte. El cierre de sesión lo pone en
-    False y genera solo el grupo, porque encadenar una llamada por participante
-    dentro de una petición HTTP excede el plazo del servidor cuando el grupo es
-    grande. El análisis individual se genera después, al abrir cada informe.
+    lo deja en True y genera todo lo que falte. La apertura del informe de
+    sesión (_generar_analisis_ia) lo pone en False y genera solo el grupo,
+    porque encadenar una llamada por participante dentro de esa misma
+    petición excedería el plazo del servidor cuando el grupo es grande. El
+    análisis individual se genera aparte, al abrir cada informe individual
+    (_analisis_persona_perezoso), repartido en el tiempo en vez de encadenado.
 
     PRIVACIDAD: a analisis.py solo se le pasan textos de preguntas, aciertos y
     números; el nombre y el hash del participante no salen nunca hacia el modelo.

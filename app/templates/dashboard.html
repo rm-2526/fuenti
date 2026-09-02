@@ -72,11 +72,13 @@
     </div>
   </div>
 
-  {# Facilitadores: solo para administradores. Antes vivía en el navbar;
+  {# Administración: solo para administradores. Antes vivía en el navbar;
      al limpiarlo, esta tarjeta es ahora la única vía al panel de admin,
-     así que es importante conservarla. #}
+     así que es importante conservarla. Cubre dos pestañas (Facilitadores y
+     Solicitudes de eliminación, ver admin/_nav.html), por eso el nombre y la
+     bajada son genéricos y no mencionan solo facilitadores. #}
   {% if current_user.es_admin %}
-  <!-- Facilitadores (solo admin) -->
+  <!-- Administración (solo admin) -->
   <div class="col-12 col-md-4">
     <div class="card tarjeta-accion h-100">
       <div class="card-body">
@@ -84,11 +86,14 @@
         <h2 class="h5 mb-1">
           <a href="{{ url_for('admin.facilitadores') }}"
              class="stretched-link text-body text-decoration-none">
-            Facilitadores
+            Administración
           </a>
+          {% if pendientes_admin %}
+            <span class="badge bg-warning text-dark">{{ pendientes_admin }}</span>
+          {% endif %}
         </h2>
         <p class="small text-body-secondary mb-0">
-          Crea cuentas y activa o desactiva accesos.
+          Cuentas de facilitador y solicitudes de eliminación de datos.
         </p>
       </div>
     </div>

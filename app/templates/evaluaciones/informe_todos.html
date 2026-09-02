@@ -168,7 +168,8 @@
         {% for fila in matriz.filas %}
           <tr>
             <td class="nom">
-              <a href="{{ url_for('evaluaciones.informe_individual', eval_id=evaluacion.id, sesion_id=sesion.id, participante_id=fila.participante_id) }}">
+              <a href="{{ url_for('evaluaciones.informe_individual', eval_id=evaluacion.id, sesion_id=sesion.id, participante_id=fila.participante_id) }}"
+                 class="js-cargando">
                 {{ fila.nombre }}
               </a>
               {% if fila.nombre == "(sin nombre)" %}

@@ -7,7 +7,7 @@ from flask_migrate import Migrate
 from dotenv import load_dotenv
 from flask_login import LoginManager
 from flask_login import LoginManager, login_required
-from flask import Flask, render_template
+from flask import Flask, render_template, request, flash, redirect, url_for
 
 from app.config import Config
 
@@ -102,6 +102,86 @@ def create_app(config_class: type = Config) -> Flask:
     @login_required
     def dashboard():
         from flask_login import current_user
-        return render_template("dashboard.html", nombre=current_user.nombre)
+        # Badge de "algo espera revisión" en la tarjeta de Administración.
+        # Solo se calcula para un admin: un facilitador normal no ve el panel
+        # y no tiene por qué pagar el costo de esta consulta.
+        pendientes_admin = 0
+        if current_user.es_admin:
+            from app.models import Facilitador, SolicitudEliminacion
+            pendientes_facilitadores = db.session.scalar(
+                db.select(db.func.count())
+                .select_from(Facilitador)
+                .where(Facilitador.aprobado.is_(False))
+            )
+            pendientes_eliminaciones = db.session.scalar(
+                db.select(db.func.count())
+                .select_from(SolicitudEliminacion)
+                .where(SolicitudEliminacion.estado == "pendiente")
+            )
+            pendientes_admin = pendientes_facilitadores + pendientes_eliminaciones
+        return render_template(
+            "dashboard.html",
+            nombre=current_user.nombre,
+            pendientes_admin=pendientes_admin,
+        )
+
+    @app.route("/privacidad", methods=["GET", "POST"])
+    def privacidad():
+        """Página pública de privacidad y solicitud de eliminación de datos.
+
+        Sin sesión, y sin dato de nadie salvo lo que la propia persona escribe
+        en el formulario. El RUT nunca se guarda: solo su hash, calculado con
+        la misma función que usa el ingreso de un participante
+        (app/utils/rut.hash_rut), así que una solicitud aquí y una
+        participación allá quedan enlazadas por el mismo valor sin que en
+        ningún punto quede el RUT en texto plano.
+
+        La respuesta de éxito es siempre la misma exista o no una coincidencia
+        real: decir "no encontramos datos con ese RUT" convertiría el
+        formulario en un instrumento para confirmar si alguien participó de
+        una capacitación, que es exactamente el tipo de filtración que esta
+        página existe para evitar. Mismo razonamiento que auth.solicitud.
+        """
+        from app.models import SolicitudEliminacion
+        from app.utils.rut import validar_rut, es_rut_bloqueado, hash_rut
+
+        if request.method == "POST":
+            rut = request.form.get("rut", "").strip()
+            contacto = request.form.get("contacto", "").strip()
+
+            if not validar_rut(rut):
+                flash("Revisa el RUT: no corresponde a uno válido.", "danger")
+                return render_template("privacidad.html", rut=rut, contacto=contacto)
+
+            # Mismo segundo chequeo que el ingreso de participante (ver
+            # app/participante/routes.py): un RUT como 11.111.111-1 pasa el
+            # módulo 11 pero es uno de los que se usan como ejemplo y no se
+            # acepta como identidad real. Debe rechazarse aquí también, o
+            # cualquiera podría crear una solicitud "de prueba" que nunca
+            # correspondería a un participante de verdad.
+            if es_rut_bloqueado(rut):
+                flash(
+                    "Ese RUT no se acepta: es uno de los que se usan como "
+                    "ejemplo. Ingresa tu RUT real.",
+                    "danger",
+                )
+                return render_template("privacidad.html", rut=rut, contacto=contacto)
+
+            salt = app.config["RUT_SALT"]
+            solicitud = SolicitudEliminacion(
+                identificador_hash=hash_rut(rut, salt),
+                contacto=contacto[:255] if contacto else None,
+            )
+            db.session.add(solicitud)
+            db.session.commit()
+
+            flash(
+                "Recibimos tu solicitud. Un administrador la revisará y tus "
+                "datos serán eliminados si corresponde.",
+                "success",
+            )
+            return redirect(url_for("privacidad"))
+
+        return render_template("privacidad.html", rut="", contacto="")
 
     return app

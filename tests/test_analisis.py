@@ -294,14 +294,18 @@ def test_cerrar_sin_api_key_cierra_y_no_persiste_analisis(app, client, facilitad
         assert r.analisis_ia is None
 
 
-def test_cerrar_persiste_solo_el_analisis_del_grupo(
-    app, client, facilitador, monkeypatch
-):
-    """El cierre genera UNA llamada, la del grupo.
+def test_cerrar_no_genera_analisis_ia(app, client, facilitador, monkeypatch):
+    """Cerrar la sesión ya no llama a Gemini en absoluto.
 
-    Antes generaba tambien la de cada participante. Con treinta personas eso
-    excedia el plazo del servidor (ver _generar_analisis_ia). El analisis
-    individual queda para cuando se abra su informe.
+    Hasta la prueba de cargabilidad, el cierre generaba el análisis de cada
+    participante (N+1 llamadas encadenadas). Ese problema se resolvió primero
+    dejando solo la llamada del grupo, pero incluso una única llamada de red
+    es tiempo variable dentro de una petición que debe sentirse instantánea
+    para el facilitador. Ahora cerrar es solo un cambio de estado y un commit:
+    ni el análisis del grupo ni el individual se generan aquí. El del grupo se
+    genera la primera vez que se abre el informe de sesión (ver
+    test_informe_todos_genera_analisis_del_grupo_la_primera_vez); el
+    individual, al abrir cada informe de persona.
     """
     app.config["GEMINI_API_KEY"] = "clave-de-prueba"
     llamadas = []
@@ -316,14 +320,46 @@ def test_cerrar_persiste_solo_el_analisis_del_grupo(
 
     client.post(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/cerrar")
 
-    assert len(llamadas) == 1  # solo el grupo, no una por persona
+    assert len(llamadas) == 0  # ninguna llamada al cerrar
     with app.app_context():
         s = db.session.get(Sesion, sesion_id)
         r = db.session.query(Resultado).filter_by(participante_id=part_id).one()
+        assert s.analisis_ia is None            # se genera al abrir el informe
+        assert s.analisis_generado_at is None
+        assert r.analisis_ia is None
+        assert r.analisis_generado_at is None
+
+
+def test_informe_todos_genera_analisis_del_grupo_la_primera_vez(
+    app, client, facilitador, monkeypatch
+):
+    """La primera apertura del informe de sesión genera el análisis del
+    grupo; abrirlo de nuevo no vuelve a llamar al modelo (idempotencia, mismo
+    criterio que _analisis_persona_perezoso para el informe individual)."""
+    app.config["GEMINI_API_KEY"] = "clave-de-prueba"
+    llamadas = []
+
+    def _falso(prompt, api_key, modelo=None, timeout=30):
+        llamadas.append(prompt)
+        return "Análisis simulado."
+
+    monkeypatch.setattr(gemini, "generar_texto", _falso)
+    eval_id, sesion_id, part_id = _sesion_con_finalizado(app, facilitador.id)
+    _login(client)
+
+    client.post(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/cerrar")
+    assert len(llamadas) == 0
+
+    client.get(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/informe-todos")
+    assert len(llamadas) == 1  # primera apertura: genera
+
+    with app.app_context():
+        s = db.session.get(Sesion, sesion_id)
         assert s.analisis_ia == "Análisis simulado."
         assert s.analisis_generado_at is not None
-        assert r.analisis_ia is None          # todavia no: se genera al abrir
-        assert r.analisis_generado_at is None
+
+    client.get(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/informe-todos")
+    assert len(llamadas) == 1  # segunda apertura: idempotente, no vuelve a llamar
 
 
 def test_cerrar_con_muchos_participantes_no_encadena_llamadas(
@@ -331,9 +367,13 @@ def test_cerrar_con_muchos_participantes_no_encadena_llamadas(
 ):
     """Regresion de la falla encontrada en la prueba de cargabilidad.
 
-    Con el comportamiento anterior, una sesion de N finalizados producia N+1
-    llamadas espaciadas dentro de la misma peticion. Aqui se verifica que el
-    numero de llamadas del cierre no depende de cuanta gente rindio.
+    Con el comportamiento original, una sesion de N finalizados producia N+1
+    llamadas espaciadas dentro de la misma peticion de cierre. Ese problema se
+    resolvió en dos pasos: primero sacando el análisis individual del cierre
+    (quedó solo la del grupo), y después sacando también esa última llamada
+    (ver test_cerrar_no_genera_analisis_ia). Este test verifica el estado
+    final: el número de llamadas al cerrar es CERO sin importar cuánta gente
+    rindió, porque el cierre ya no llama a Gemini bajo ninguna circunstancia.
     """
     app.config["GEMINI_API_KEY"] = "clave-de-prueba"
     app.config["GEMINI_ESPACIADO_SEG"] = 0.0
@@ -348,7 +388,13 @@ def test_cerrar_con_muchos_participantes_no_encadena_llamadas(
 
     client.post(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/cerrar")
 
-    assert len(llamadas) == 1  # diez finalizados, una sola llamada
+    assert len(llamadas) == 0  # diez finalizados, cero llamadas al cerrar
+
+    # La primera apertura del informe de sesión sigue siendo UNA sola llamada
+    # (la del grupo), sin importar cuánta gente rindió: no encadena una por
+    # participante, solo la generación individual de cada informe lo hace.
+    client.get(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/informe-todos")
+    assert len(llamadas) == 1
 
 
 def test_informe_individual_genera_el_analisis_la_primera_vez(

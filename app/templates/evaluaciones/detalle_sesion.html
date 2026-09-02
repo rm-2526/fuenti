@@ -47,7 +47,7 @@
         Imprimir resumen / PDF
       </button>
       <a href="{{ url_for('evaluaciones.informe_todos', eval_id=evaluacion.id, sesion_id=sesion.id) }}"
-         class="btn btn-outline-primary btn-sm">
+         class="btn btn-outline-primary btn-sm js-cargando">
         Resultados por pregunta
       </a>
     {% endif %}
@@ -280,7 +280,7 @@
             <td class="text-end no-print">
               {% if p.finalizado %}
                 <a href="{{ url_for('evaluaciones.informe_individual', eval_id=evaluacion.id, sesion_id=sesion.id, participante_id=p.id) }}"
-                   class="btn btn-link btn-sm p-0">Ver informe</a>
+                   class="btn btn-link btn-sm p-0 js-cargando">Ver informe</a>
               {% endif %}
             </td>
           </tr>

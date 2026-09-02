@@ -1,0 +1,25 @@
+{#
+  Navegación compartida del panel de administración. Vive aparte para que
+  Facilitadores y Solicitudes de eliminación se sientan una sola sección con
+  dos vistas, en lugar de dos pantallas sueltas. `pendientes_eliminacion` es
+  opcional: cada vista que la incluya pasa su propio conteo (ver admin/routes.py).
+#}
+{% macro nav(activo, pendientes_eliminacion=0) %}
+<ul class="nav nav-pills mb-4">
+  <li class="nav-item">
+    <a class="nav-link {{ 'active' if activo == 'facilitadores' else '' }}"
+       href="{{ url_for('admin.facilitadores') }}">
+      Facilitadores
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {{ 'active' if activo == 'eliminaciones' else '' }}"
+       href="{{ url_for('admin.eliminaciones') }}">
+      Solicitudes de eliminación
+      {% if pendientes_eliminacion %}
+        <span class="badge bg-warning text-dark ms-1">{{ pendientes_eliminacion }}</span>
+      {% endif %}
+    </a>
+  </li>
+</ul>
+{% endmacro %}

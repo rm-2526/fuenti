@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% from "admin/_nav.html" import nav %}
+
+{% block title %}Solicitudes de eliminación - Fuenti{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-4">Administración</h1>
+{{ nav('eliminaciones', pendientes_eliminacion) }}
+
+<p class="text-body-secondary small mb-4">
+  Nacen desde la página pública de privacidad, cuando un participante pide que
+  se eliminen sus datos. El sistema nunca guarda el RUT: por eso, ni aquí ni
+  en ninguna otra pantalla, vas a ver el número, solo en qué evaluaciones y
+  sesiones aparece.
+</p>
+
+{% if pendientes %}
+  <div class="card border-warning mb-4">
+    <div class="card-body">
+      <h2 class="h5 mb-3">
+        Pendientes
+        <span class="badge bg-warning text-dark">{{ pendientes|length }}</span>
+      </h2>
+
+      {% for s in pendientes %}
+        {% set filas = resumenes.get(s.id, []) %}
+        <div class="border rounded p-3 mb-3">
+          <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+            <div>
+              <p class="mb-1">
+                <strong>{{ filas|length }}</strong>
+                participación(es) encontrada(s)
+                {% if s.contacto %}
+                  · contacto dejado: <span class="font-monospace">{{ s.contacto }}</span>
+                {% endif %}
+              </p>
+              <p class="text-muted small mb-0">
+                Solicitada el {{ s.solicitado_at.strftime("%Y-%m-%d %H:%M") }}
+              </p>
+            </div>
+            <div class="text-end">
+              <form method="POST"
+                    action="{{ url_for('admin.aprobar_eliminacion', sid=s.id) }}"
+                    class="d-inline">
+                <button type="submit"
+                        class="btn btn-sm btn-outline-danger js-confirmar"
+                        data-confirmar-titulo="Eliminar datos"
+                        data-confirmar-mensaje="Se borrarán de forma permanente {{ filas|length }} participación(es) y sus respuestas, en todas las evaluaciones donde aparezcan. Esta acción no se puede deshacer."
+                        data-confirmar-boton="Eliminar definitivamente">
+                  Aprobar y eliminar
+                </button>
+              </form>
+              <form method="POST"
+                    action="{{ url_for('admin.rechazar_eliminacion', sid=s.id) }}"
+                    class="d-inline">
+                <button type="submit"
+                        class="btn btn-sm btn-outline-secondary js-confirmar"
+                        data-confirmar-titulo="Rechazar solicitud"
+                        data-confirmar-mensaje="La solicitud queda registrada como rechazada. No se elimina ningún dato."
+                        data-confirmar-boton="Rechazar">
+                  Rechazar
+                </button>
+              </form>
+            </div>
+          </div>
+
+          {% if filas %}
+            <table class="table table-sm mb-0 mt-3">
+              <thead class="table-light">
+                <tr>
+                  <th>Evaluación</th>
+                  <th>Sesión</th>
+                  <th>Rendida</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for titulo, codigo, finalizado_at in filas %}
+                  <tr>
+                    <td>{{ titulo }}</td>
+                    <td class="font-monospace">{{ codigo }}</td>
+                    <td>{{ finalizado_at | hora_local if finalizado_at else "—" }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <p class="text-muted small mb-0 mt-2">
+              No se encontró ninguna participación con este RUT. Puede
+              rechazarse, o aprobarse igual para dejar constancia de que no
+              había nada que eliminar.
+            </p>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+{% else %}
+  <div class="alert alert-light border">
+    No hay solicitudes pendientes.
+  </div>
+{% endif %}
+
+{% if resueltas %}
+  <h2 class="h5 mb-3">Historial reciente</h2>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>Resuelta</th>
+          <th>Estado</th>
+          <th>Resuelta por</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in resueltas %}
+          <tr>
+            <td class="text-muted small">
+              {{ s.resuelta_at.strftime("%Y-%m-%d %H:%M") if s.resuelta_at else "—" }}
+            </td>
+            <td>
+              {% if s.estado == "aprobada" %}
+                <span class="badge bg-danger">Datos eliminados</span>
+              {% else %}
+                <span class="badge bg-secondary">Rechazada</span>
+              {% endif %}
+            </td>
+            <td>{{ s.resuelta_por.nombre if s.resuelta_por else "—" }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
+{% endblock %}

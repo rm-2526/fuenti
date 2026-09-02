@@ -288,3 +288,57 @@ class Resultado(db.Model):
             name="ck_resultado_umbral",
         ),
     )
+
+
+class SolicitudEliminacion(db.Model):
+    """Solicitud pública de eliminación de los datos de un participante.
+
+    Nace desde la página pública /privacidad: la persona escribe su RUT, el
+    sistema calcula el mismo hash que usa Participante.identificador_hash
+    (ver app/utils/rut.py) y registra la solicitud. El RUT en texto plano
+    NUNCA se guarda, ni siquiera aquí: solo su hash, igual que en el resto
+    del sistema.
+
+    Aprobar la solicitud borra TODAS las filas de Participante con ese hash,
+    en cualquier evaluación y de cualquier facilitador (arrastra Respuesta y
+    Resultado por la cascada ya declarada en Participante). Por eso vive en
+    el panel de administración y no en el de cada facilitador: el
+    consentimiento es de la persona titular del dato, no de quien dictó la
+    capacitación, y su alcance cruza cuentas.
+
+    Limite conocido: como el sistema no le pide correo a un participante para
+    rendir, no hay forma de verificar aquí que quien solicita la eliminación
+    es efectivamente esa persona. Es el mismo modelo de confianza que ya
+    rige el ingreso por RUT (quien lo escribe se asume su titular); `contacto`
+    es la unica mitigacion, y es opcional.
+    """
+    __tablename__ = "solicitud_eliminacion"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    identificador_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Opcional: correo o telefono para que un administrador contacte a quien
+    # solicita, si tiene dudas antes de aprobar. No se exige porque en ningun
+    # otro punto del sistema se le pide correo a un participante.
+    contacto: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # 'pendiente' -> 'aprobada' (se borraron los datos) o 'rechazada' (no se
+    # tocó nada). Es una transición única y sin vuelta, igual que el cierre
+    # de una sesión: no hay un cuarto estado ni un camino de regreso.
+    estado: Mapped[str] = mapped_column(String(20), nullable=False, default="pendiente")
+    solicitado_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=ahora_utc)
+    resuelta_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Quien la resolvio, para auditoria. Nullable: nunca se borra al borrar al
+    # administrador (no hay ON DELETE CASCADE aca), asi que si esa cuenta se
+    # da de baja el registro historico de la solicitud se conserva igual.
+    resuelta_por_id: Mapped[int | None] = mapped_column(
+        ForeignKey("facilitador.id"), nullable=True
+    )
+
+    resuelta_por: Mapped["Facilitador | None"] = relationship()
+
+    __table_args__ = (
+        CheckConstraint(
+            "estado IN ('pendiente', 'aprobada', 'rechazada')",
+            name="ck_solicitud_eliminacion_estado",
+        ),
+        Index("ix_solicitud_eliminacion_hash", "identificador_hash"),
+    )

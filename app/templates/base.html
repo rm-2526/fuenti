@@ -156,6 +156,29 @@
     @media print {
       body { background-color: #fff !important; }
     }
+
+    /* Aviso minimalista de "generando", para enlaces que abren un informe
+       cuyo analisis narrativo puede tardar unos segundos en la primera
+       apertura (ver .js-cargando mas abajo). Puntos suspensivos animados, sin
+       barra de progreso: no hay un progreso real que medir, porque el
+       servidor esta esperando a un servicio externo de duracion variable. */
+    a.js-cargando.cargando {
+      opacity: .65;
+      cursor: wait;
+    }
+    .js-cargando .js-puntos::after {
+      content: "";
+      display: inline-block;
+      width: 1em;
+      text-align: left;
+      animation: fuenti-puntos 1.2s steps(4, end) infinite;
+    }
+    @keyframes fuenti-puntos {
+      0%   { content: ""; }
+      25%  { content: "."; }
+      50%  { content: ".."; }
+      75%  { content: "..."; }
+    }
   </style>
 </head>
 <body class="bg-body-tertiary">
@@ -356,6 +379,30 @@
         if (previo) raiz.setAttribute("data-bs-theme", previo);
       });
     })();
+  </script>
+
+  <script>
+    // Aviso minimalista de "generando...", para enlaces con class="js-cargando"
+    // que abren un informe cuya primera apertura puede demorar unos segundos
+    // (el análisis narrativo se genera ahí, no antes; ver evaluaciones/routes.py).
+    //
+    // Deliberadamente NO es una barra de progreso: el servidor está esperando
+    // una respuesta de un servicio externo de duración variable, así que
+    // cualquier porcentaje sería inventado. Son puntos suspensivos animados,
+    // para no llamar la atención si la generación falla: si eso ocurre, el
+    // informe igual carga (sin el bloque de análisis) y la próxima vez que se
+    // abra se reintenta solo, porque el campo queda en NULL hasta que una
+    // llamada tenga éxito.
+    document.addEventListener("click", function (e) {
+      var link = e.target.closest("a.js-cargando");
+      if (!link || link.classList.contains("cargando")) return;
+      link.classList.add("cargando");
+      link.style.pointerEvents = "none";
+      var puntos = document.createElement("span");
+      puntos.className = "js-puntos";
+      puntos.setAttribute("aria-hidden", "true");
+      link.appendChild(puntos);
+    });
   </script>
 
   {# Scripts propios de cada pagina. Va DESPUES del bloque de arriba para que
