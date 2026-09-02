@@ -298,16 +298,34 @@
 {% endif %}
 
 {% if sesion.estado == "abierta" %}
-  <form method="POST"
-        action="{{ url_for('evaluaciones.cerrar_sesion', eval_id=evaluacion.id, sesion_id=sesion.id) }}">
-    <button type="submit"
-            class="btn btn-outline-danger js-confirmar"
-            data-confirmar-titulo="Cerrar sesión"
-            data-confirmar-mensaje="¿Cerrar esta sesión? No aceptará más ingresos ni respuestas."
-            data-confirmar-boton="Cerrar sesión">
-      Cerrar sesión
-    </button>
-  </form>
+  {% if sesion.participantes|length == 0 %}
+    {# Sesión abierta y todavía sin nadie adentro: el botón de "cerrar" se
+       reemplaza por uno de eliminar. No tiene sentido dejar un registro
+       cerrado y vacío dando vueltas; es mejor borrarlo directamente. Si
+       llega a ingresar alguien despues de que se cargó esta página, el
+       servidor lo revisa igual antes de borrar (ver eliminar_sesion). #}
+    <form method="POST"
+          action="{{ url_for('evaluaciones.eliminar_sesion', eval_id=evaluacion.id, sesion_id=sesion.id) }}">
+      <button type="submit"
+              class="btn btn-outline-danger js-confirmar"
+              data-confirmar-titulo="Eliminar sesión"
+              data-confirmar-mensaje="Esta sesión todavía no tiene participantes. En vez de cerrarla, se eliminará por completo. Esta acción no se puede deshacer."
+              data-confirmar-boton="Eliminar sesión">
+        Eliminar sesión (sin participantes)
+      </button>
+    </form>
+  {% else %}
+    <form method="POST"
+          action="{{ url_for('evaluaciones.cerrar_sesion', eval_id=evaluacion.id, sesion_id=sesion.id) }}">
+      <button type="submit"
+              class="btn btn-outline-danger js-confirmar"
+              data-confirmar-titulo="Cerrar sesión"
+              data-confirmar-mensaje="¿Cerrar esta sesión? No aceptará más ingresos ni respuestas."
+              data-confirmar-boton="Cerrar sesión">
+        Cerrar sesión
+      </button>
+    </form>
+  {% endif %}
 {% endif %}
 
 {#

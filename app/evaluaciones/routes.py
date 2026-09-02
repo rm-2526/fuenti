@@ -738,6 +738,49 @@ def cerrar_sesion(eval_id, sesion_id):
     )
 
 
+@bp.route("/<int:eval_id>/sesiones/<int:sesion_id>/eliminar", methods=["POST"])
+@login_required
+def eliminar_sesion(eval_id, sesion_id):
+    """Elimina una sesión SIN participantes, en lugar de cerrarla.
+
+    No es un botón nuevo en la interfaz: reemplaza al de "Cerrar sesión" en
+    la propia pantalla de la sesión, cuando esta todavía no recibió a nadie.
+    La idea es evitar que se acumulen sesiones cerradas vacías (una por cada
+    prueba, cada código que se abrió y no se compartió, etc.), que no aportan
+    nada y hay que ir borrando después a mano.
+
+    El chequeo de que esté vacía se hace TAMBIÉN aquí, en el servidor, y no
+    solo confiando en que la plantilla ocultó el botón correcto: si entre que
+    se cargó la página y se envió el formulario alguien alcanzó a ingresar
+    (poco probable, pero posible), se rechaza en vez de borrar datos reales.
+
+    db.session.delete(sesion) es suficiente para llevarse todo lo de abajo:
+    Sesion.participantes ya declara cascade="all, delete-orphan", y
+    Participante.respuestas / Participante.resultado hacen lo mismo un nivel
+    más abajo. No hay nada que migrar: es la misma cascada que ya usa
+    evaluaciones.eliminar para borrar una evaluación completa.
+    """
+    evaluacion = _get_evaluacion_propia(eval_id)
+    sesion = _get_sesion_de_evaluacion(evaluacion, sesion_id)
+
+    if sesion.participantes:
+        flash(
+            "Esta sesión ya tiene participantes: no se puede eliminar así. "
+            "Ciérrala normalmente.",
+            "danger",
+        )
+        return redirect(
+            url_for("evaluaciones.detalle_sesion", eval_id=eval_id, sesion_id=sesion_id)
+        )
+
+    codigo = sesion.codigo
+    db.session.delete(sesion)
+    db.session.commit()
+    flash(f'Sesión "{codigo}" eliminada (no tenía participantes).', "success")
+    return redirect(url_for("evaluaciones.iniciar"))
+
+
+
 def _generar_analisis_ia(sesion: Sesion) -> None:
     """Genera SOLO el análisis del GRUPO, la primera vez que se abre el
     informe de sesión (informe_todos). Es el equivalente, a nivel de sesión,

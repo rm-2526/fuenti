@@ -289,3 +289,73 @@ def test_dashboard_admin_ve_pendientes_de_ambos_tipos(app, client):
     body = resp.data.decode()
     assert "Administración" in body
     assert ">2<" in body or "badge bg-warning text-dark\">2" in body
+
+
+# ------------- Efecto de la aprobación sobre los informes ya emitidos -------------
+#
+# Estos dos tests responden directamente a la duda de si aprobar una
+# solicitud realmente saca a la persona de TODO lugar donde aparecía, no
+# solo de la tabla Participante en la base de datos.
+
+
+def test_tras_aprobar_desaparece_de_la_matriz_de_sesion(app, client):
+    """El informe de sesión en matriz (informe_todos) arma sus filas con una
+    consulta en vivo sobre Participante, no con un snapshot congelado. Al
+    borrar al participante, su fila deja de poder aparecer: no hace falta
+    ningún paso adicional de "limpieza" del informe de sesión."""
+    admin_id = _admin(app)
+    with app.app_context():
+        ev = Evaluacion(facilitador_id=admin_id, titulo="Eval Matriz", umbral_aprobacion=60)
+        db.session.add(ev); db.session.commit()
+        ses = Sesion(evaluacion_id=ev.id, codigo="MATRIZ1", estado="cerrada", umbral_aprobacion=60)
+        db.session.add(ses); db.session.commit()
+        salt = app.config["RUT_SALT"]
+        p = Participante(
+            sesion_id=ses.id, identificador_hash=hash_rut(RUT_VALIDO, salt),
+            nombre="Nombre Único De Prueba",
+        )
+        db.session.add(p); db.session.commit()
+        r = Resultado(
+            participante_id=p.id, puntaje=1, total_preguntas=1,
+            porcentaje=100.0, nota=7.0, aprobado=True,
+        )
+        db.session.add(r); db.session.commit()
+        eval_id, sesion_id = ev.id, ses.id
+
+    sid = _crear_solicitud(app)
+    _login(client, "admin@fuenti.cl", "adminpass8")
+
+    resp_antes = client.get(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/informe-todos")
+    assert "Nombre Único De Prueba" in resp_antes.data.decode()
+
+    client.post(f"/admin/eliminaciones/{sid}/aprobar")
+
+    resp_despues = client.get(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/informe-todos")
+    assert "Nombre Único De Prueba" not in resp_despues.data.decode()
+
+
+def test_tras_aprobar_el_informe_individual_deja_de_existir(app, client):
+    """El informe individual se busca por el id del participante. Una vez
+    borrado, ya no hay nada que mostrar: la ruta debe responder 404, no una
+    página en blanco ni un error de servidor."""
+    admin_id = _admin(app)
+    part_id = _participante_con_resultado(app, admin_id, evaluacion_titulo="Eval Individual")
+    with app.app_context():
+        p = db.session.get(Participante, part_id)
+        eval_id = p.sesion.evaluacion_id
+        sesion_id = p.sesion_id
+
+    sid = _crear_solicitud(app)
+    _login(client, "admin@fuenti.cl", "adminpass8")
+
+    resp_antes = client.get(
+        f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/participantes/{part_id}/informe"
+    )
+    assert resp_antes.status_code == 200
+
+    client.post(f"/admin/eliminaciones/{sid}/aprobar")
+
+    resp_despues = client.get(
+        f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/participantes/{part_id}/informe"
+    )
+    assert resp_despues.status_code == 404
