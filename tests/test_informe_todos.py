@@ -233,16 +233,42 @@ def test_informe_todos_sin_finalizados_muestra_aviso(client, facilitador, app):
 
 # ============ "Ver resultados": la sesión cerrada abre la matriz ============
 
-def test_detalle_sesion_cerrada_redirige_a_la_matriz(client, facilitador, app):
-    """Al entrar a una sesión CERRADA por su URL de detalle, se redirige a la
-    matriz de resultados (informe_todos). detalle_sesion queda para la abierta."""
+def test_detalle_sesion_cerrada_no_redirige_y_muestra_resumen(client, facilitador, app):
+    """Al entrar a una sesión CERRADA por su URL de detalle, la pantalla se
+    muestra a sí misma con el resumen y la tabla de participantes, en lugar de
+    redirigir a la matriz (informe_todos).
+
+    Antes redirigía automáticamente. Se cambió porque cerrar_sesion también
+    redirige a detalle_sesion: esa cadena (cerrar -> detalle_sesion ->
+    informe_todos) hacía que el facilitador esperara la generación del
+    análisis narrativo del grupo sin haber hecho clic en nada. Ahora
+    detalle_sesion es una vista de solo lectura para sesiones cerradas, sin
+    ninguna llamada a IA, e informe_todos (con su análisis) queda a un clic
+    de distancia y deliberado.
+    """
     data = _crear_evaluacion_2preguntas(app, facilitador.id)
     s = _crear_sesion(app, data["eval_id"], "CERR01", estado="cerrada")
 
     _login(client)
     resp = client.get(f"/evaluaciones/{data['eval_id']}/sesiones/{s}")
-    assert resp.status_code == 302
-    assert "informe-todos" in resp.headers["Location"]
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert "Resultados por pregunta" in body  # enlace hacia informe_todos
+    # El enlace hacia la matriz debe llevar el enganche de la animación de
+    # "generando...", porque ahí sí ocurre la llamada a la IA.
+    assert "js-cargando" in body
+
+
+def test_detalle_sesion_cerrada_no_muestra_link_de_invitacion(client, facilitador, app):
+    """Sin QR ni enlace de ingreso para una sesión que ya no acepta
+    participantes: generarlos sería trabajo desperdiciado."""
+    data = _crear_evaluacion_2preguntas(app, facilitador.id)
+    s = _crear_sesion(app, data["eval_id"], "CERR02", estado="cerrada")
+
+    _login(client)
+    resp = client.get(f"/evaluaciones/{data['eval_id']}/sesiones/{s}")
+    assert resp.status_code == 200
+    assert "link-participante" not in resp.data.decode()
 
 
 def test_detalle_sesion_abierta_no_redirige(client, facilitador, app):

@@ -393,24 +393,39 @@ def abrir_sesion(eval_id):
 def detalle_sesion(eval_id, sesion_id):
     evaluacion = _get_evaluacion_propia(eval_id)
     sesion = _get_sesion_de_evaluacion(evaluacion, sesion_id)
-    # Una sesión cerrada ya no se opera: sus resultados viven en la matriz
-    # (informe_todos). Esta pantalla queda para la sesión en vivo (abierta), que
-    # es cuando se necesita el link para invitar, el refresco y cerrar.
-    if sesion.estado != "abierta":
-        return redirect(
-            url_for("evaluaciones.informe_todos", eval_id=eval_id, sesion_id=sesion_id)
-        )
+
     resumen = _resumen_de_sesion(sesion)
     participantes = filas_informe_sesion(_participantes_ordenados(sesion))
 
-    # QR del mismo enlace que se muestra al lado, para que el participante entre
-    # escaneando en vez de tipear. Se arma aca (y no en la plantilla) para que
-    # la plantilla solo pinte. Llegar hasta esta linea ya garantiza que la
-    # sesion esta abierta: mas arriba se redirige si no lo esta.
-    enlace_ingreso = url_for(
-        "participante.ingreso", codigo=sesion.codigo, _external=True
-    )
-    qr_ingreso = svg_de_enlace(enlace_ingreso)
+    # El enlace de invitacion y su QR solo tienen sentido con la sesion
+    # abierta: una sesion cerrada no acepta ingresos. Se calculan aca (y no en
+    # la plantilla) para que esta solo pinte, pero SOLO si van a mostrarse: no
+    # tiene sentido generar un QR que nadie va a ver.
+    #
+    # Esta pantalla YA NO redirige a informe_todos cuando la sesion esta
+    # cerrada. Antes lo hacia, con el argumento de que "los resultados viven
+    # en la matriz". El problema: cerrar_sesion redirige aqui mismo, asi que
+    # esa redireccion automatica encadenaba cerrar -> detalle_sesion ->
+    # informe_todos SIN que el facilitador hiciera clic en nada, y
+    # informe_todos es quien genera (de forma perezosa) el analisis narrativo
+    # del grupo. El facilitador terminaba esperando esa llamada igual, solo
+    # que en la segunda redireccion en lugar de en el POST de cierre, y sin
+    # ver la animacion de carga (que depende de un clic real en un enlace
+    # .js-cargando, no de una redireccion del servidor).
+    #
+    # Ahora, al cerrar, esta misma pantalla se re-renderiza con el resumen y
+    # la tabla de participantes -sin analisis narrativo, que no hace ninguna
+    # llamada de red- y el enlace "Resultados por pregunta" (mas abajo en la
+    # plantilla) es la UNICA puerta hacia informe_todos. Esa si es una accion
+    # deliberada del facilitador, y ahi la animacion de "..." tiene sentido.
+    if sesion.estado == "abierta":
+        enlace_ingreso = url_for(
+            "participante.ingreso", codigo=sesion.codigo, _external=True
+        )
+        qr_ingreso = svg_de_enlace(enlace_ingreso)
+    else:
+        enlace_ingreso = None
+        qr_ingreso = None
 
     return render_template(
         "evaluaciones/detalle_sesion.html",

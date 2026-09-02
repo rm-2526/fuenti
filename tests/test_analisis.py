@@ -330,6 +330,47 @@ def test_cerrar_no_genera_analisis_ia(app, client, facilitador, monkeypatch):
         assert r.analisis_generado_at is None
 
 
+def test_cerrar_siguiendo_la_redireccion_tampoco_genera_analisis(
+    app, client, facilitador, monkeypatch
+):
+    """Regresión específica de un bug real: cerrar_sesion redirige a
+    detalle_sesion, y ANTES detalle_sesion redirigía a su vez a
+    informe_todos cuando la sesión ya no estaba abierta. El navegador sigue
+    las redirecciones automáticamente (sin que el facilitador haga clic en
+    nada), así que esa cadena terminaba disparando la generación del
+    análisis igual, solo que en la segunda redirección en lugar de en el
+    POST de cierre — el mismo tiempo de espera, sin la animación de carga
+    (que depende de un clic real en un enlace .js-cargando).
+
+    Ahora detalle_sesion ya no redirige cuando la sesión está cerrada: se
+    muestra a sí misma. Este test seguía redirecciones (follow_redirects,
+    como hace cualquier navegador) para que una regresión de este tipo no
+    pase inadvertida otra vez.
+    """
+    app.config["GEMINI_API_KEY"] = "clave-de-prueba"
+    llamadas = []
+    monkeypatch.setattr(
+        gemini, "generar_texto",
+        lambda prompt, api_key, modelo=None, timeout=30: llamadas.append(prompt) or "ok",
+    )
+    eval_id, sesion_id, part_id = _sesion_con_finalizado(app, facilitador.id)
+    _login(client)
+
+    resp = client.post(
+        f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/cerrar",
+        follow_redirects=True,
+    )
+
+    assert resp.status_code == 200
+    assert len(llamadas) == 0
+    # La pagina en la que el navegador termina es detalle_sesion (resumen),
+    # no informe_todos (matriz + analisis).
+    assert "Resultados por pregunta" in resp.get_data(as_text=True)
+    with app.app_context():
+        s = db.session.get(Sesion, sesion_id)
+        assert s.analisis_ia is None
+
+
 def test_informe_todos_genera_analisis_del_grupo_la_primera_vez(
     app, client, facilitador, monkeypatch
 ):

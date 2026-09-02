@@ -116,7 +116,16 @@ def test_el_qr_y_el_link_apuntan_al_mismo_lugar(client, facilitador, app):
 
 def test_la_sesion_cerrada_no_muestra_el_qr(client, facilitador, app):
     """Al cerrar, la sesion no acepta mas ingresos: el QR tiene que irse con el
-    link. No necesita expiracion propia, hereda la del enlace."""
+    link. No necesita expiracion propia, hereda la del enlace.
+
+    La pagina de detalle siempre incluye la REGLA css '.qr-sesion { ... }' en
+    su <style>, este de la sesion abierta o cerrada (es CSS estatico de la
+    plantilla). Por eso el chequeo no puede ser "la cadena 'qr-sesion' no
+    aparece en el html": eso da un falso positivo de fallo. Lo que importa es
+    que el ELEMENTO (el div que envuelve el SVG) no se renderice, que es lo
+    que efectivamente confirma que qr_ingreso quedo en None y la plantilla no
+    entro al bloque `{% if sesion.estado == "abierta" %}`.
+    """
     eval_id, sesion_id = _eval_con_sesion(
         app, facilitador.id, codigo="QRCERR", estado="cerrada"
     )
@@ -127,7 +136,8 @@ def test_la_sesion_cerrada_no_muestra_el_qr(client, facilitador, app):
     )
     html = resp.data.decode("utf-8")
 
-    assert "qr-sesion" not in html
+    assert 'class="qr-sesion' not in html
+    assert "link-participante" not in html  # el otro elemento del mismo bloque
 
 
 def test_otro_facilitador_no_ve_el_qr_de_una_sesion_ajena(client, facilitador, app):

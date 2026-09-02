@@ -244,9 +244,11 @@ def test_sesion_abierta_ofrece_volver_a_iniciar(client, facilitador, app):
     assert "Volver a Iniciar" not in html
 
 
-def test_sesion_cerrada_redirige_a_resultados(client, facilitador, app):
-    """Una sesión cerrada ya no se opera: al entrar a su detalle se redirige a la
-    matriz de resultados (informe_todos). detalle_sesion queda para la abierta."""
+def test_sesion_cerrada_muestra_su_propio_resumen(client, facilitador, app):
+    """Una sesión cerrada ya no se opera, pero al entrar a su detalle ahora se
+    muestra a sí misma (resumen, sin llamada a IA) en lugar de redirigir a la
+    matriz de resultados. Ver el comentario en evaluaciones.detalle_sesion
+    para el porqué del cambio."""
     eval_id = _crear_eval(app, facilitador.id)
     _login(client)
     _abrir(client, eval_id)
@@ -255,8 +257,8 @@ def test_sesion_cerrada_redirige_a_resultados(client, facilitador, app):
 
     client.post(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}/cerrar")
     resp = client.get(f"/evaluaciones/{eval_id}/sesiones/{sesion_id}")
-    assert resp.status_code == 302
-    assert "informe-todos" in resp.headers["Location"]
+    assert resp.status_code == 200
+    assert "Resultados por pregunta" in resp.get_data(as_text=True)
 
 
 def test_informes_muestra_el_umbral_de_cada_sesion(client, facilitador, app):
