@@ -15,6 +15,20 @@
         </p>
 
         <form method="POST" action="{{ url_for('auth.solicitud') }}">
+
+          {# Trampa para bots ("honeypot"). Un navegador manejado por una
+             persona nunca envia este campo: esta fuera de la pantalla, fuera
+             del orden de tabulacion (tabindex="-1") y oculto para lectores de
+             pantalla (aria-hidden). Un bot que parsea el HTML y rellena todo lo
+             que encuentra, si lo envia, y el servidor descarta ese envio.
+             Se usa left:-9999px y NO display:none: los bots mas nuevos saltan
+             los campos con display:none justamente porque suelen ser trampas.
+             El name suena a campo real a proposito. #}
+          <div style="position:absolute; left:-9999px" aria-hidden="true">
+            <label for="website">Deja este campo vacío</label>
+            <input type="text" name="website" id="website" tabindex="-1"
+                   autocomplete="off">
+          </div>
           <div class="mb-3">
             <label for="nombre" class="form-label">Nombre y apellido</label>
             <input type="text" class="form-control" id="nombre" name="nombre"

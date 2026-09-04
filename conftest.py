@@ -17,7 +17,7 @@ os.environ["GEMINI_ESPACIADO_SEG"] = "0"
 
 import pytest
 
-from app import create_app, db
+from app import create_app, db, limiter
 from app.models import Facilitador
 
 
@@ -25,6 +25,12 @@ from app.models import Facilitador
 def app():
     app = create_app()
     app.config.update(TESTING=True)
+    # El rate limiting queda APAGADO en la suite. Varios tests hacen decenas de
+    # POST al login o a los formularios publicos desde el mismo cliente, y con
+    # el limitador activo empezarian a recibir 429 a mitad de camino. Se apaga
+    # aca, en el fixture, y no con una variable de entorno, para que la
+    # configuracion real de produccion no tenga una via de desactivacion.
+    limiter.enabled = False
     with app.app_context():
         db.create_all()
         yield app

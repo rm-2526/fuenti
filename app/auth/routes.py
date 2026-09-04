@@ -5,13 +5,19 @@ from sqlalchemy.exc import IntegrityError
 from flask_login import login_user, logout_user, login_required, current_user
 from urllib.parse import urlparse
 
-from app import db
+from app import db, limiter
 from app.auth import bp
 from app.models import Facilitador
 from app.utils.activacion import ACTIVACION_MAX_AGE, huella, leer_token
 
 
 @bp.route("/login", methods=["GET", "POST"])
+# Solo el POST se limita: si se limitara tambien el GET, alguien que
+# simplemente recarga la pantalla de login se autobloquearia. Frena la fuerza
+# bruta, que ademas de un riesgo de credenciales es un riesgo de disponibilidad:
+# check_password corre PBKDF2 con muchas iteraciones, asi que cada intento
+# consume CPU de un unico worker.
+@limiter.limit("5 per minute; 30 per hour", methods=["POST"])
 def login():
     if current_user.is_authenticated:
         return redirect(url_for("dashboard"))
@@ -57,6 +63,11 @@ def login():
 
 
 @bp.route("/solicitud", methods=["GET", "POST"])
+# Nadie solicita legitimamente tres cuentas por hora desde la misma IP. El
+# riesgo aca no es de acceso —una solicitud no da acceso a nada— sino de
+# saturacion: cada envio crea una fila que un administrador tiene que revisar a
+# mano, y llenar ese panel de basura lo vuelve inutilizable.
+@limiter.limit("3 per hour; 10 per day", methods=["POST"])
 def solicitud():
     """Solicitud publica de una cuenta de facilitador.
 
@@ -74,6 +85,20 @@ def solicitud():
         return redirect(url_for("dashboard"))
 
     if request.method == "POST":
+        # Trampa para bots ("honeypot"), igual que en /privacidad: el campo
+        # 'website' esta fuera de pantalla y fuera del orden de tabulacion, asi
+        # que solo lo rellena un programa. Se responde con el mismo mensaje de
+        # exito de siempre y sin crear la solicitud, para no ensenarle al autor
+        # del bot que el campo existe. Coherente con la regla que ya rige esta
+        # ruta: la respuesta es identica exista o no ya ese correo.
+        if request.form.get("website"):
+            flash(
+                "Recibimos tu solicitud. Si corresponde, recibirás un enlace "
+                "para activar tu cuenta.",
+                "success",
+            )
+            return redirect(url_for("auth.login"))
+
         nombre = request.form.get("nombre", "").strip()
         email = request.form.get("email", "").strip().lower()
         organizacion = request.form.get("organizacion", "").strip()

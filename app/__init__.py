@@ -7,6 +7,9 @@ from flask_migrate import Migrate
 from dotenv import load_dotenv
 from flask_login import LoginManager
 from flask_login import LoginManager, login_required
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from werkzeug.middleware.proxy_fix import ProxyFix
 from flask import Flask, render_template, request, flash, redirect, url_for
 
 from app.config import Config
@@ -19,6 +22,26 @@ login_manager = LoginManager()
 login_manager.login_view = "auth.login"
 login_manager.login_message = "Inicia sesión para acceder a esta página."
 login_manager.login_message_category = "warning"
+
+# Limitador de peticiones para los formularios publicos de escritura.
+#
+# Almacenamiento en memoria a proposito: Render free corre UN worker
+# (gunicorn --threads 4, sin -w), asi que todos los threads comparten el mismo
+# proceso y el mismo contador. No hace falta Redis. El costo es que los
+# contadores se pierden cuando Render duerme el servicio, lo que no importa: un
+# atacante no gana nada esperando quince minutos entre tandas.
+#
+# default_limits vacio: NADA queda limitado salvo lo que se marque de forma
+# explicita con @limiter.limit. Un limite global golpearia el flujo del
+# participante, donde una sala entera de capacitacion sale por la MISMA IP
+# publica y treinta personas ingresando a la vez son trafico legitimo.
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=[],
+    # Explicito para dejar constancia de que la eleccion es deliberada y no un
+    # descuido (sin este parametro la libreria emite un warning al arrancar).
+    storage_uri="memory://",
+)
 
 # Zona horaria de Chile. Se usa America/Santiago (y no un "-4" fijo) para que
 # el cambio de horario de verano se ajuste solo.
@@ -46,6 +69,14 @@ def create_app(config_class: type = Config) -> Flask:
     db.init_app(app)
     migrate.init_app(app, db)
     login_manager.init_app(app)
+
+    # Render sirve la app detras de un proxy. Sin esto request.remote_addr es
+    # la IP del proxy y NO la del visitante, de modo que el limitador contaria
+    # a todo el mundo como un solo cliente y bloquearia a usuarios legitimos
+    # apenas otro gastara la cuota. Es obligatorio para que el rate limiting
+    # sirva de algo; x_for=1 porque hay un unico proxy por delante.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
+    limiter.init_app(app)
 
     # Filtro de plantilla: {{ fecha | hora_local }} muestra la hora en Chile.
     app.jinja_env.filters["hora_local"] = hora_local
@@ -126,6 +157,7 @@ def create_app(config_class: type = Config) -> Flask:
         )
 
     @app.route("/privacidad", methods=["GET", "POST"])
+    @limiter.limit("3 per hour; 10 per day", methods=["POST"])
     def privacidad():
         """Página pública de privacidad y solicitud de eliminación de datos.
 
@@ -146,6 +178,25 @@ def create_app(config_class: type = Config) -> Flask:
         from app.utils.rut import validar_rut, es_rut_bloqueado, hash_rut
 
         if request.method == "POST":
+            # Trampa para bots ("honeypot"). El campo 'website' esta fuera de
+            # la pantalla y fuera del orden de tabulacion, asi que un navegador
+            # manejado por una persona nunca lo envia con contenido; un bot que
+            # parsea el HTML y rellena todo lo que encuentra, si.
+            #
+            # Se responde con el MISMO mensaje de exito de siempre y sin
+            # guardar nada. Si se rechazara de forma visible, el autor del bot
+            # veria el fallo, encontraria el campo escondido y ajustaria su
+            # script: la trampa se quema. Ademas es coherente con la regla que
+            # ya rige esta pagina —la respuesta no cambia nunca— por la que no
+            # sirve para averiguar nada sobre quien esta en el sistema.
+            if request.form.get("website"):
+                flash(
+                    "Recibimos tu solicitud. Un administrador la revisará y tus "
+                    "datos serán eliminados si corresponde.",
+                    "success",
+                )
+                return redirect(url_for("privacidad"))
+
             rut = request.form.get("rut", "").strip()
             contacto = request.form.get("contacto", "").strip()
 
@@ -183,5 +234,20 @@ def create_app(config_class: type = Config) -> Flask:
             return redirect(url_for("privacidad"))
 
         return render_template("privacidad.html", rut="", contacto="")
+
+    @app.errorhandler(429)
+    def demasiadas_peticiones(e):
+        """Respuesta al superar un limite de peticiones.
+
+        Sin esto Flask-Limiter devuelve una pagina de Werkzeug sin el layout
+        del sitio. Se devuelve a la pantalla de login con un flash, que es el
+        camino de vuelta correcto desde los tres formularios limitados.
+        """
+        flash(
+            "Demasiados intentos. Espera unos minutos antes de volver a "
+            "intentarlo.",
+            "warning",
+        )
+        return redirect(url_for("auth.login"))
 
     return app
