@@ -129,7 +129,7 @@ def test_las_solicitudes_no_aparecen_como_cuentas(client, app):
     _login(client, type("F", (), {"email": "admin@fuenti.cl"})())
     html = client.get("/admin/facilitadores").data.decode("utf-8")
 
-    assert "Solicitudes pendientes" in html
+    assert "Solicitudes de acceso" in html
     assert "Constructora Andes" in html
 
 

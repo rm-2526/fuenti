@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}Enlace de activación - Fuenti{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-4">Enviar acceso</h1>
+
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="card border-success mb-3">
+      <div class="card-body">
+        <h2 class="h5 mb-1">Mensaje para {{ facilitador.nombre }}</h2>
+        <p class="text-muted small mb-3">
+          Cópialo y envíaselo por correo, mensajería o el medio que uses
+          habitualmente. Fuenti no envía correos: la entrega la haces tú.
+        </p>
+
+        {# El mensaje va en un <textarea> de solo lectura y no en un <pre>:
+           asi se selecciona completo de una pasada tambien en un telefono, si
+           el boton de copiar no estuviera disponible (contextos sin HTTPS, o
+           un navegador sin acceso al portapapeles). #}
+        <textarea id="mensaje" class="form-control font-monospace mb-3"
+                  rows="11" readonly
+                  aria-label="Mensaje de activación listo para copiar"
+>Hola {{ facilitador.nombre }}:
+
+Tu cuenta en Fuenti ya está creada. Para empezar a usarla necesitas
+establecer tu propia contraseña; nadie más la conoce, ni siquiera quien
+administra el sistema.
+
+1. Abre este enlace:
+   {{ enlace }}
+
+2. Escribe la contraseña que quieras usar (mínimo 8 caracteres) y
+   confírmala.
+
+3. Vuelve a la pantalla de inicio de sesión y entra con tu correo
+   ({{ facilitador.email }}) y esa contraseña.
+
+El enlace vence en {{ dias }} días y sirve una sola vez. Si expira o ya lo
+usaste, pídele al administrador que te emita uno nuevo.
+
+Si tienes dudas sobre cómo usar la plataforma, en el menú encontrarás una
+guía de uso.</textarea>
+
+        <div class="d-flex flex-wrap gap-2">
+          <button type="button" id="btn-copiar" class="btn btn-primary"
+                  data-copiado="Copiado ✓">
+            Copiar mensaje
+          </button>
+          <a class="btn btn-outline-secondary"
+             href="mailto:{{ facilitador.email }}?subject={{ 'Tu acceso a Fuenti' | urlencode }}">
+            Abrir en mi correo
+          </a>
+          <a href="{{ url_for('admin.facilitadores') }}"
+             class="btn btn-outline-secondary ms-auto">
+            Volver al panel
+          </a>
+        </div>
+      </div>
+    </div>
+
+    {# El enlace suelto, por si el administrador solo quiere esa parte. #}
+    <details>
+      <summary class="text-muted small">Ver solo el enlace</summary>
+      <p class="font-monospace small text-break mt-2 mb-0">{{ enlace }}</p>
+    </details>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card">
+      <div class="card-body">
+        <h2 class="h6 mb-2">Antes de enviarlo</h2>
+        <ul class="small text-muted mb-0 ps-3">
+          <li class="mb-2">
+            Este enlace es una credencial: quien lo tenga puede fijar la
+            contraseña de esta cuenta. Envíalo solo a
+            <span class="font-monospace">{{ facilitador.email }}</span>.
+          </li>
+          <li class="mb-2">
+            Vence en {{ dias }} días y muere al usarse.
+          </li>
+          <li class="mb-2">
+            Si se pierde, puedes emitir otro cuando quieras con el botón
+            «Enlace» del panel. Eso no cambia la contraseña vigente.
+          </li>
+          <li>
+            Recargar esta página no invalida el enlace: es el mismo mientras
+            la contraseña no cambie.
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Copiar al portapapeles con respaldo. navigator.clipboard solo existe en
+  // contextos seguros (HTTPS o localhost); si no esta, se cae a seleccionar el
+  // texto para que la persona copie a mano, en vez de fallar en silencio.
+  (function () {
+    var btn = document.getElementById("btn-copiar");
+    var area = document.getElementById("mensaje");
+    if (!btn || !area) return;
+
+    btn.addEventListener("click", function () {
+      var confirmar = function () {
+        var original = btn.textContent;
+        btn.textContent = btn.dataset.copiado;
+        btn.classList.replace("btn-primary", "btn-success");
+        setTimeout(function () {
+          btn.textContent = original;
+          btn.classList.replace("btn-success", "btn-primary");
+        }, 2000);
+      };
+
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(area.value).then(confirmar, function () {
+          area.select();
+        });
+      } else {
+        area.select();
+        area.setSelectionRange(0, 99999);
+        try { document.execCommand("copy"); confirmar(); } catch (e) { /* queda seleccionado */ }
+      }
+    });
+  })();
+</script>
+{% endblock %}

@@ -7,13 +7,17 @@
 <h1 class="h3 mb-4">Administración</h1>
 {{ nav('facilitadores', pendientes_eliminacion) }}
 
-{# Solicitudes pendientes: van arriba y solo aparecen si hay alguna. Es lo
-   unico de esta pantalla que espera una decision; el resto es consulta. #}
+{# Solicitudes de acceso: van arriba y solo aparecen si hay alguna. Es lo
+   unico de esta pantalla que espera una decision; el resto es consulta.
+   Se llaman "de acceso" y no "pendientes" para que se lean como hermanas de
+   "Solicitudes de eliminacion" (la otra pestana del panel): sin el
+   complemento, un administrador no sabe de cual de los dos tipos se trata
+   sin abrir la seccion. El badge naranja ya comunica que estan pendientes. #}
 {% if pendientes %}
   <div class="card border-warning mb-4">
     <div class="card-body">
       <h2 class="h5 mb-3">
-        Solicitudes pendientes
+        Solicitudes de acceso
         <span class="badge bg-warning text-dark">{{ pendientes|length }}</span>
       </h2>
 
@@ -44,9 +48,9 @@
                     <button type="submit"
                             class="btn btn-sm btn-outline-success js-confirmar"
                             data-confirmar-titulo="Aprobar solicitud"
-                            data-confirmar-mensaje="Se creará la cuenta de «{{ p.nombre }}» y obtendrás un enlace para que establezca su contraseña."
+                            data-confirmar-mensaje="Se creará la cuenta de «{{ p.nombre }}» y pasarás a una pantalla con el mensaje listo para enviarle."
                             data-confirmar-boton="Aprobar">
-                      Aprobar
+                      Aprobar y generar enlace
                     </button>
                   </form>
                   <form method="POST"

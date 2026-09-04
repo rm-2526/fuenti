@@ -37,7 +37,7 @@ from app.models import (
     SolicitudEliminacion,
     ahora_utc,
 )
-from app.utils.activacion import generar_token
+from app.utils.activacion import ACTIVACION_MAX_AGE, generar_token
 
 
 def admin_required(view):
@@ -113,10 +113,9 @@ def facilitadores():
             db.session.add(nuevo)
             try:
                 db.session.commit()
-                flash(
-                    f"Facilitador \"{email}\" creado. Envíale este enlace para "
-                    f"que establezca su contraseña: {_enlace_activacion(nuevo)}",
-                    "success",
+                flash(f"Facilitador \"{email}\" creado.", "success")
+                return redirect(
+                    url_for("admin.mensaje_activacion", fid=nuevo.id)
                 )
             except IntegrityError:
                 # Carrera improbable: alguien insertó el mismo correo en paralelo.
@@ -159,6 +158,44 @@ def _contar_eliminaciones_pendientes() -> int:
     )
 
 
+@bp.route("/facilitadores/<int:fid>/mensaje")
+@admin_required
+def mensaje_activacion(fid):
+    """Pantalla con el mensaje de bienvenida listo para copiar y enviar.
+
+    Existe por dos razones. La primera es de uso: el enlace de activacion es
+    largo e ilegible, y pegarlo suelto en un WhatsApp no le dice a quien lo
+    recibe que tiene que establecer una contrasena ni que el enlace vence. Aca
+    el texto viene redactado, con el boton de copiar al lado.
+
+    La segunda es de seguridad. Antes el enlace viajaba dentro de un mensaje
+    flash, y Flask guarda los flash en la cookie de sesion, que esta FIRMADA
+    pero no cifrada: el token quedaba legible en el navegador del
+    administrador hasta que se renderizara. Aca se pasa por el contexto de la
+    plantilla y no toca la cookie.
+
+    Es GET a proposito: no muta nada. _enlace_activacion solo lee el id y el
+    password_hash vigentes, asi que recargar esta pagina regenera el mismo
+    enlace en vez de invalidar el anterior. Tampoco abre una via nueva: el
+    boton "Enlace" del panel ya permitia emitirlo para cualquier cuenta.
+    """
+    f = _get_facilitador(fid)
+
+    if not f.activo:
+        flash(
+            "La cuenta está desactivada. Reactívala antes de emitir el enlace.",
+            "danger",
+        )
+        return redirect(url_for("admin.facilitadores"))
+
+    return render_template(
+        "admin/mensaje_activacion.html",
+        facilitador=f,
+        enlace=_enlace_activacion(f),
+        dias=ACTIVACION_MAX_AGE // 86400,
+    )
+
+
 def _get_facilitador(fid):
     f = db.session.get(Facilitador, fid)
     if f is None:
@@ -194,12 +231,9 @@ def enlace_activacion(fid):
             "La cuenta está desactivada. Reactívala antes de emitir el enlace.",
             "danger",
         )
-    else:
-        flash(
-            f"Enlace de activación para \"{f.email}\": {_enlace_activacion(f)}",
-            "info",
-        )
-    return redirect(url_for("admin.facilitadores"))
+        return redirect(url_for("admin.facilitadores"))
+
+    return redirect(url_for("admin.mensaje_activacion", fid=f.id))
 
 
 @bp.route("/facilitadores/<int:fid>/editar", methods=["GET", "POST"])
@@ -295,12 +329,8 @@ def aprobar_solicitud(fid):
 
     f.aprobado = True
     db.session.commit()
-    flash(
-        f"Solicitud de \"{f.email}\" aprobada. Envíale este enlace para que "
-        f"establezca su contraseña: {_enlace_activacion(f)}",
-        "success",
-    )
-    return redirect(url_for("admin.facilitadores"))
+    flash(f"Solicitud de \"{f.email}\" aprobada.", "success")
+    return redirect(url_for("admin.mensaje_activacion", fid=f.id))
 
 
 @bp.route("/solicitudes/<int:fid>/rechazar", methods=["POST"])
