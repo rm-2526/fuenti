@@ -7,6 +7,7 @@ _insertar_preguntas).
 """
 
 import json
+import re
 
 from app import db
 from app.models import Alternativa, Evaluacion, Facilitador, Pregunta
@@ -496,3 +497,113 @@ def test_exportar_e_importar_conserva_el_orden_invertido(client, app, facilitado
         alts = _alts_de_la_unica_pregunta("Copia invertida")
         assert [a.texto for a in alts] == ["Falso", "Verdadero"]
         assert alts[0].es_correcta is True
+
+
+# -------------------- Pegar la respuesta de una IA tal cual --------------------
+#
+# El facilitador copia lo que le devolvio ChatGPT/Claude/Gemini. Ese texto trae
+# la cerca del bloque de codigo, frases de cortesia y, sobre todo, los escapes
+# que la interfaz de chat agrega al renderizar Markdown (\[ , \" ). La ruta lo
+# limpia (app/utils/json_ia.py) en vez de exigirle al usuario que lo edite.
+
+def _una_pregunta_json():
+    return (
+        '{"preguntas": [{"enunciado": "¿Capital de Chile?", '
+        '"tipo": "opcion_multiple", "alternativas": ['
+        '{"texto": "Santiago", "es_correcta": true}, '
+        '{"texto": "Lima", "es_correcta": false}]}]}'
+    )
+
+
+def test_importar_respuesta_con_bloque_de_codigo(client, app, facilitador):
+    _login(client)
+    pegado = "```json\n" + _una_pregunta_json() + "\n```"
+    _subir(client, pegado, titulo="Desde bloque")
+    with app.app_context():
+        ev = db.session.query(Evaluacion).filter_by(titulo="Desde bloque").one()
+        assert len(ev.preguntas) == 1
+
+
+def test_importar_respuesta_con_prosa_alrededor(client, app, facilitador):
+    _login(client)
+    pegado = (
+        "¡Claro! Aquí tienes las preguntas:\n\n```json\n"
+        + _una_pregunta_json()
+        + "\n```\n\n¿Quieres que agregue más?"
+    )
+    _subir(client, pegado, titulo="Con prosa")
+    with app.app_context():
+        assert db.session.query(Evaluacion).filter_by(titulo="Con prosa").count() == 1
+
+
+def test_importar_respuesta_con_escapes_de_markdown(client, app, facilitador):
+    """El caso real: ChatGPT devuelve \\[ y \\] en vez de [ y ]."""
+    _login(client)
+    pegado = _una_pregunta_json().replace("[", "\\[").replace("]", "\\]")
+    _subir(client, pegado, titulo="Con escapes")
+    with app.app_context():
+        ev = db.session.query(Evaluacion).filter_by(titulo="Con escapes").one()
+        assert ev.preguntas[0].enunciado == "¿Capital de Chile?"
+        assert sorted(a.texto for a in ev.preguntas[0].alternativas) == [
+            "Lima", "Santiago"
+        ]
+
+
+def test_importar_respuesta_con_comas_sobrantes(client, app, facilitador):
+    _login(client)
+    pegado = _una_pregunta_json().replace("}]}]}", "},]},]}")
+    _subir(client, pegado, titulo="Con comas")
+    with app.app_context():
+        assert db.session.query(Evaluacion).filter_by(titulo="Con comas").count() == 1
+
+
+def test_importar_lista_de_preguntas_sin_envoltorio(client, app, facilitador):
+    """Si la IA devuelve solo la lista, se acepta igual."""
+    _login(client)
+    pegado = json.dumps([
+        {
+            "enunciado": "¿2+2?",
+            "tipo": "opcion_multiple",
+            "alternativas": [
+                {"texto": "4", "es_correcta": True},
+                {"texto": "5", "es_correcta": False},
+            ],
+        }
+    ])
+    _subir(client, pegado, titulo="Solo lista")
+    with app.app_context():
+        ev = db.session.query(Evaluacion).filter_by(titulo="Solo lista").one()
+        assert len(ev.preguntas) == 1
+
+
+def test_importar_avisa_cuando_tuvo_que_limpiar(client, facilitador):
+    _login(client)
+    resp = _previsualizar(client, "```json\n" + _una_pregunta_json() + "\n```")
+    assert "Se corrigió el formato".encode("utf-8") in resp.data
+
+
+def test_importar_no_avisa_cuando_el_json_venia_limpio(client, facilitador):
+    _login(client)
+    resp = _previsualizar(client, _una_pregunta_json())
+    assert "Se corrigió el formato".encode("utf-8") not in resp.data
+
+
+def test_vista_previa_deja_el_json_ya_limpio_en_el_textarea(client, facilitador):
+    """Tras limpiar, el textarea muestra el JSON normalizado: el facilitador ve
+    con qué se trabajó y el siguiente envío ya no necesita reparación."""
+    _login(client)
+    resp = _previsualizar(client, "```json\n" + _una_pregunta_json() + "\n```")
+    html = resp.data.decode("utf-8")
+    pegado = re.search(r'id="json"[^>]*>(.*?)</textarea>', html, re.DOTALL).group(1)
+    assert "```" not in pegado             # la cerca del bloque ya no está
+    assert pegado.strip().startswith("{")  # el JSON sí
+    assert "preguntas" in pegado
+
+
+def test_error_de_json_indica_donde_falla(client, app, facilitador):
+    _login(client)
+    resp = _subir(client, '{\n  "preguntas": [\n    {"enunciado": "a" "tipo": "x"}\n  ]\n}')
+    assert b"no es un JSON" in resp.data
+    assert "línea 3".encode("utf-8") in resp.data
+    with app.app_context():
+        assert Evaluacion.query.count() == 0

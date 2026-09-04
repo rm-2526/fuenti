@@ -27,6 +27,7 @@ from app.models import Alternativa, Evaluacion, Participante, Pregunta, Resultad
 from app.utils.sesion import generar_codigo_sesion
 from app.utils.qr import svg_de_enlace
 from app.utils.estadisticas import resumir_resultados
+from app.utils.json_ia import leer_json_ia
 from app.utils import gemini
 from app.utils.analisis import (
     prompt_persona,
@@ -256,15 +257,26 @@ def importar():
         flash("El texto pegado es demasiado largo.", "danger")
         return _re_render()
 
-    try:
-        data = json.loads(json_texto)
-    except json.JSONDecodeError:
-        flash(
-            "El texto pegado no es un JSON válido. Revisa que tenga el formato "
-            "indicado más abajo.",
-            "danger",
-        )
+    # El texto viene de un chat de IA, asi que rara vez es JSON limpio: trae las
+    # comillas invertidas del bloque de codigo, alguna frase de cortesia y, sobre
+    # todo, los escapes que la interfaz agrega al renderizar Markdown (\[ , \" ).
+    # leer_json_ia repara eso; si repara algo se avisa y el textarea pasa a
+    # mostrar el JSON ya normalizado, para que el facilitador vea con que se
+    # trabajo. Si no hay forma de leerlo, el mensaje dice donde falla.
+    lectura = leer_json_ia(json_texto)
+    if not lectura.ok:
+        flash(lectura.error, "danger")
         return _re_render()
+
+    data = lectura.datos
+    if lectura.ajustes:
+        json_texto = lectura.texto
+        flash(
+            "Se corrigió el formato del texto pegado antes de leerlo: "
+            + "; ".join(lectura.ajustes)
+            + ". Revisa la vista previa antes de importar.",
+            "warning",
+        )
 
     # La validacion corre SIEMPRE, tanto en vista previa como al importar. Asi
     # "Importar" nunca crea algo distinto de lo que se acaba de previsualizar.
@@ -1236,14 +1248,21 @@ def _json_a_preguntas(data):
     de dominio (rangos, conteos) las aplica _validar despues, igual que en la
     creacion manual.
     """
-    if not isinstance(data, dict):
-        return [], ["El archivo debe contener un objeto JSON en la raíz."]
+    # Una IA a veces devuelve directamente la lista de preguntas, sin envolverla
+    # en {"preguntas": [...]}. Se acepta: es la misma informacion.
+    if isinstance(data, list):
+        preguntas_json = data
+    elif isinstance(data, dict):
+        preguntas_json = data.get("preguntas")
+        if not isinstance(preguntas_json, list):
+            return [], ["El archivo debe tener una lista llamada 'preguntas'."]
+    else:
+        return [], [
+            "El archivo debe contener un objeto JSON (o una lista de preguntas) "
+            "en la raíz."
+        ]
 
     errores = []
-
-    preguntas_json = data.get("preguntas")
-    if not isinstance(preguntas_json, list):
-        return [], ["El archivo debe tener una lista llamada 'preguntas'."]
 
     preguntas = []
     for idx, p in enumerate(preguntas_json, start=1):

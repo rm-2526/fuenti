@@ -135,8 +135,12 @@
 En las de verdadero/falso, redacta aproximadamente la mitad de las afirmaciones como falsas, y alterna cuál alternativa va primero: en unas "Verdadero" y en otras "Falso".
 Idioma: español.
 
-Responde únicamente con el JSON, sin explicaciones ni texto adicional, con esta estructura exacta:
+Entrega la respuesta dentro de un único bloque de código: una línea con ```json, el JSON, y una línea con ```. Sin explicaciones ni texto fuera del bloque.
+No escapes ningún carácter: escribe [ y ] tal cual, nunca \[ ni \]. Usa solo comillas dobles rectas ("), nunca comillas tipográficas (“ ” ‘ ’). No dejes una coma antes de un } o de un ].
 
+Estructura exacta:
+
+```json
 {
   "preguntas": [
     {
@@ -157,6 +161,7 @@ Responde únicamente con el JSON, sin explicaciones ni texto adicional, con esta
     }
   ]
 }
+```
 
 Reglas del formato:
 - "tipo" es "opcion_multiple" (de 2 a 6 alternativas) o "verdadero_falso" (exactamente 2).
@@ -221,8 +226,10 @@ Reglas del formato:
               rows="10" spellcheck="false"
               placeholder='{ "preguntas": [ ... ] }' required>{{ json_texto }}</textarea>
     <div class="form-text">
-      Pega la respuesta de la IA completa. Si trae texto antes o después del
-      JSON, bórralo: debe empezar en <code>{</code> y terminar en <code>}</code>.
+      Pega la respuesta de la IA tal como venga: no hace falta que la limpies.
+      Si trae las comillas invertidas del bloque de código, una frase antes o
+      después, o barras invertidas de más (<code>\[</code>, <code>\"</code>),
+      se corrigen al leerla y se te avisa qué se corrigió.
     </div>
   </div>
 

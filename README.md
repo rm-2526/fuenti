@@ -111,6 +111,7 @@ app/
     analisis.py      Análisis narrativo
     activacion.py    Enlaces firmados de activación y restablecimiento
     gemini.py        Adaptador al modelo generativo externo
+    json_ia.py       Lectura tolerante del JSON pegado desde un chat de IA
     qr.py            Generación local de códigos QR (segno)
   templates/         Plantillas Jinja2
   static/            JS propio (validación de RUT, sondeo del panel)
@@ -120,7 +121,7 @@ scripts/
   locustfile.py      Escenarios de prueba de carga
 docs/
   REQUERIMIENTOS.md
-tests/               30 archivos, 393 casos
+tests/               31 archivos, 452 casos
 conftest.py
 main.py
 Procfile
