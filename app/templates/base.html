@@ -398,10 +398,30 @@
       if (!link || link.classList.contains("cargando")) return;
       link.classList.add("cargando");
       link.style.pointerEvents = "none";
+      // Los puntos van con aria-hidden, asi que sin esto un lector de pantalla
+      // no recibiria ningun aviso de que la pagina esta trabajando.
+      link.setAttribute("aria-busy", "true");
       var puntos = document.createElement("span");
       puntos.className = "js-puntos";
       puntos.setAttribute("aria-hidden", "true");
       link.appendChild(puntos);
+    });
+
+    // Al volver con "Atras", el navegador restaura la pagina desde el bfcache
+    // CON las mutaciones del DOM intactas: el enlace seguiria gris, con los
+    // puntos pegados y sin pointer-events, o sea muerto hasta recargar a mano.
+    // Es un flujo habitual (abrir un informe, volver, abrir el siguiente), asi
+    // que se revierte el estado al restaurar. e.persisted distingue la vuelta
+    // desde el bfcache de una carga normal, donde no hay nada que limpiar.
+    window.addEventListener("pageshow", function (e) {
+      if (!e.persisted) return;
+      document.querySelectorAll("a.js-cargando.cargando").forEach(function (link) {
+        link.classList.remove("cargando");
+        link.style.pointerEvents = "";
+        link.removeAttribute("aria-busy");
+        var puntos = link.querySelector(".js-puntos");
+        if (puntos) puntos.remove();
+      });
     });
   </script>
 
